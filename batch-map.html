@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>สร้าง PDF รวม FMU — FSC</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      margin: 0; background: #263238;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0; font-family: 'Sarabun', sans-serif;
+    }
+
+    /* ─── Progress bar (sticky) ─── */
+    #ctrl {
+      width: 100%; background: #1b5e20; color: #fff;
+      padding: 12px 20px; box-sizing: border-box;
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      position: sticky; top: 0; z-index: 9999;
+    }
+    #ctrl h3 { margin: 0; font-size: 0.95em; white-space: nowrap; }
+    #pbar { flex: 1; height: 8px; background: rgba(255,255,255,0.25); border-radius: 4px; overflow: hidden; min-width: 60px; }
+    #pfill { height: 100%; background: #69f0ae; border-radius: 4px; transition: width 0.3s; width: 0%; }
+    #pmsg { font-size: 0.8em; color: rgba(255,255,255,0.9); max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #pcnt { font-size: 0.8em; color: rgba(255,255,255,0.85); white-space: nowrap; }
+    #dlBtn {
+      display: none;
+      background: #69f0ae; color: #1b5e20;
+      border: none; padding: 10px 20px;
+      border-radius: 6px; font-weight: 700; font-size: 1em;
+      cursor: pointer; white-space: nowrap;
+    }
+    #dlBtn:hover { background: #b9f6ca; }
+
+    /* ─── Sheet wrapper ─── */
+    #sheetWrap { padding: 16px 0 32px; }
+
+    /* ─── A4 sheet — apply print-equivalent styles directly (html2canvas ไม่ใช้ @media print) ─── */
+    #mapSheet {
+      /* Fixed A4 size */
+      width: 210mm !important;
+      height: 297mm !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+      /* Match @media print padding */
+      padding: 8mm 7mm !important;
+      /* Flex column เหมือน print */
+      display: flex !important;
+      flex-direction: column !important;
+      /* Shadow สำหรับ preview */
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4) !important;
+    }
+    #mapSheet .hcvf-header {
+      flex: 0 0 auto !important;
+      margin-bottom: 2mm !important;
+      border: 1.5px solid #000 !important;
+      padding: 4mm 6mm !important;
+    }
+    #mapSheet .hcvf-title    { font-size: 13pt !important; }
+    #mapSheet .hcvf-subtitle { font-size: 8.5pt !important; }
+    #mapSheet .hcvf-subtitle.small { font-size: 7.5pt !important; }
+    #mapSheet .hcvf-map-wrap {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      margin-bottom: 1.5mm !important;
+      border: 1.5px solid #000 !important;
+      position: relative !important;
+    }
+    #mapSheet .hcvf-map {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #mapSheet .plot-coord-bar {
+      flex: 0 0 auto !important;
+      font-size: 7.5pt !important;
+      padding: 2mm 3mm !important;
+      margin-bottom: 1.5mm !important;
+    }
+    #mapSheet .hcvf-footer {
+      flex: 0 0 auto !important;
+      height: 48mm !important;
+      gap: 2mm !important;
+      display: grid !important;
+      grid-template-columns: 1.2fr 1.4fr 1fr 0.9fr !important;
+    }
+    #mapSheet .hcvf-footer > div {
+      border: 1.2px solid #000 !important;
+      padding: 2mm 3mm !important;
+      font-size: 7.5pt !important;
+      overflow: hidden !important;
+    }
+    #mapSheet .hcvf-footer h4  { font-size: 8.5pt !important; margin: 0 0 1mm 0 !important; }
+    #mapSheet .hcvf-footer p,
+    #mapSheet .lg-row,
+    #mapSheet .proj,
+    #mapSheet .prep            { font-size: 7pt !important; line-height: 1.25 !important; }
+    #mapSheet .lg-grid         { gap: 1mm !important; }
+    #mapSheet .hcvf-inset      { overflow: hidden !important; }
+    #mapSheet .inset-map       { width: 100% !important; height: 32mm !important; }
+    #mapSheet .inset-label     { font-size: 7pt !important; text-align: center; }
+    /* force print color */
+    #mapSheet * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  </style>
+</head>
+<body>
+
+<!-- ─── Progress bar ─── -->
+<div id="ctrl">
+  <h3>📄 PDF FMU</h3>
+  <div id="pbar"><div id="pfill"></div></div>
+  <div id="pmsg">⏳ โหลดข้อมูล...</div>
+  <div id="pcnt">0 / 0</div>
+  <button id="dlBtn">⬇️ ดาวน์โหลด PDF</button>
+</div>
+
+<!-- ─── A4 Preview (1 instance, สลับเนื้อหาทีละหน้า) ─── -->
+<div id="sheetWrap">
+<div class="hcvf-sheet" id="mapSheet">
+  <div class="hcvf-header">
+    <div class="hcvf-title"    id="shTitle"></div>
+    <div class="hcvf-subtitle" id="shAddr"></div>
+    <div class="hcvf-subtitle" id="shSummary"></div>
+    <div class="hcvf-subtitle small">พื้นที่แปลงสมาชิกเปรียบเทียบกับ https://www.globalforestwatch.org/ ข้อมูล Intact Forest Landscapes.</div>
+  </div>
+  <div class="hcvf-map-wrap">
+    <div id="mainMap" class="hcvf-map"></div>
+  </div>
+  <div class="plot-coord-bar" id="coordBar" style="display:none"></div>
+  <div class="hcvf-footer">
+    <div class="hcvf-company">
+      <h4>บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด</h4>
+      <p>บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด ตั้งอยู่เลขที่ 288 ตำบลปากปวน อำเภอวังสะพุง จังหวัดเลย 42130 เบอร์ติดต่อ 042-039916, 095-2075053</p>
+    </div>
+    <div class="hcvf-legend">
+      <h4>สัญลักษณ์</h4>
+      <div class="lg-grid">
+        <div class="lg-row"><span class="lg-swatch sw-cpa"></span><span>CPA Map (พื้นที่แปลงสมาชิก CPA)</span></div>
+        <div class="lg-row"><span class="lg-text" id="shArea">พื้นที่ —</span></div>
+        <div class="lg-row"><span class="lg-swatch sw-bnd"></span><span>ขอบเขตอำเภอ / เอกสารสิทธิ์</span></div>
+        <div class="lg-row"><span class="lg-swatch sw-ifl"></span><span>IFL Intact forest landscape TH (2025)</span></div>
+        <div class="lg-row"><span class="lg-swatch sw-wdpa"></span><span>WDPA Thailand (2026)</span></div>
+        <div class="lg-row"><span class="lg-swatch sw-water"></span><span>แหล่งน้ำ แม่น้ำ</span></div>
+      </div>
+    </div>
+    <div class="hcvf-meta">
+      <div class="north-arrow"><div class="north-circle">N<div class="north-needle"></div></div></div>
+      <div class="scale-info">
+        <div id="shScale">มาตราส่วน —</div>
+        <div class="scale-bar">
+          <span class="seg seg-b"></span><span class="seg seg-w"></span>
+          <span class="seg seg-b"></span><span class="seg seg-w"></span>
+        </div>
+        <div class="scale-labels">
+          <span>0</span><span id="shSl1">—</span>
+          <span id="shSl2">—</span><span id="shSl3">—</span>
+        </div>
+        <div class="proj">Projection: UTM Zone 47<br>Map Datum: WGS 1984</div>
+        <div class="prep">จัดทำโดยเจ้าหน้าที่<br>บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด<br>ชั้นข้อมูลการปกครอง: กรมพัฒนาที่ดิน<br><b>ปรับปรุงข้อมูล : 1 มกราคม 2569</b></div>
+      </div>
+    </div>
+    <div class="hcvf-inset">
+      <div id="insetMap" class="inset-map"></div>
+      <div class="inset-label">ภาพรวมพื้นที่</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- Data -->
+<script src="data/members.js"></script>
+<script src="data/productive.js"></script>
+<script src="data/water.js"></script>
+<script src="data/landtitles.js"></script>
+<script src="data/wdpa.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+(async function () {
+  const pmsg  = document.getElementById("pmsg");
+  const pfill = document.getElementById("pfill");
+  const pcnt  = document.getElementById("pcnt");
+
+  /* ── Helpers ── */
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function loadScript(src) {
+    return new Promise((ok, fail) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = ok; s.onerror = fail;
+      document.head.appendChild(s);
+    });
+  }
+  function fmtNum(n, d) {
+    const v = Number(n);
+    return (n == null || n === "" || isNaN(v)) ? "-" : v.toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  function safe(s) { return (s == null || s === "") ? "-" : String(s); }
+  function buildAddr(r) {
+    if (!r) return "";
+    const p = [];
+    if (r.moo)         p.push(`หมู่ที่ ${r.moo}`);
+    if (r.subdistrict) p.push(`ตำบล${r.subdistrict}`);
+    if (r.district)    p.push(`อำเภอ${r.district}`);
+    if (r.province)    p.push(`จังหวัด${r.province}`);
+    return p.join(" ");
+  }
+  function polyCentroid(coords) {
+    let sLat = 0, sLng = 0;
+    coords.forEach(c => { sLng += c[0]; sLat += c[1]; });
+    return [sLat / coords.length, sLng / coords.length];
+  }
+  function latLngToUTM(lat, lng) {
+    const zone = Math.floor((lng + 180) / 6) + 1;
+    const k0 = 0.9996, a = 6378137.0, e2 = 0.00669438;
+    const l0 = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+    const φ = lat * Math.PI / 180, λ = lng * Math.PI / 180;
+    const ep2 = e2 / (1 - e2);
+    const N = a / Math.sqrt(1 - e2 * Math.sin(φ) ** 2);
+    const T = Math.tan(φ) ** 2, C = ep2 * Math.cos(φ) ** 2, A = Math.cos(φ) * (λ - l0);
+    const M = a * ((1-e2/4-3*e2**2/64-5*e2**3/256)*φ - (3*e2/8+3*e2**2/32+45*e2**3/1024)*Math.sin(2*φ)
+      + (15*e2**2/256+45*e2**3/1024)*Math.sin(4*φ) - (35*e2**3/3072)*Math.sin(6*φ));
+    const E  = k0*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep2)*A**5/120)+500000;
+    const Nn = k0*(M+N*Math.tan(φ)*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep2)*A**6/720));
+    return { zone, easting: Math.round(E), northing: Math.round(Nn) };
+  }
+  function fmtLatLng(lat, lng) {
+    return `${Math.abs(lat).toFixed(5)}°${lat>=0?"N":"S"}, ${Math.abs(lng).toFixed(5)}°${lng>=0?"E":"W"}`;
+  }
+
+  /* ── Load external libs ── */
+  pmsg.textContent = "⏳ โหลด IFL data...";
+  if (!window.IFL_THAILAND) await loadScript("data/ifl-thailand.js").catch(()=>{});
+
+  pmsg.textContent = "⏳ โหลด jsPDF...";
+  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js").catch(()=>{});
+
+  pmsg.textContent = "⏳ โหลด html2canvas...";
+  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js").catch(()=>{});
+
+  if (!window.jspdf || !window.html2canvas) {
+    pmsg.textContent = "❌ โหลด library ไม่สำเร็จ — ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต";
+    return;
+  }
+
+  /* ── Data ── */
+  const PRODUCTIVE = window.PRODUCTIVE_AREAS || [];
+  const WATER      = window.WATER_AREAS      || [];
+  const LANDTITLES = window.LAND_TITLES      || [];
+  const WDPA_DATA  = window.WDPA_AREAS       || [];
+  const IFL_DATA   = window.IFL_THAILAND     || null;
+
+  let customRecs = [];
+  try { customRecs = JSON.parse(localStorage.getItem("fsc_custom_records") || "[]"); } catch(e){}
+  const allRecs = [...(window.MEMBERS || []), ...customRecs];
+
+  const IFL_POLYS = (IFL_DATA || []).filter(f => f.coords && f.coords.length >= 3)
+    .map(f => f.coords.map(c => [c[1], c[0]]));
+  const WDPA_POLYS = [];
+  (WDPA_DATA || []).forEach(f =>
+    (f.rings || []).forEach(ring => { if (ring && ring.length >= 3) WDPA_POLYS.push(ring.map(c => [c[1], c[0]])); })
+  );
+
+  /* ── Build scopes ── */
+  const fmuMap = new Map();
+  allRecs.forEach(r => {
+    const mm = (r.fmu || "").match(/FMU\s*(\d+)/i);
+    if (!mm) return;
+    const n = parseInt(mm[1], 10);
+    if (!fmuMap.has(n)) fmuMap.set(n, []);
+    fmuMap.get(n).push(r);
+  });
+  const scopes = [];
+  [...fmuMap.keys()].sort((a, b) => a - b).forEach(fmuNum => {
+    const recs = fmuMap.get(fmuNum);
+    const fmuLabel = `FMU${String(fmuNum).padStart(3,"0")}`;
+    scopes.push({ type:"fmu", fmuNum, fmuLabel, recs });
+    recs.slice().sort((a, b) => (a.plot||"").localeCompare(b.plot||""))
+      .forEach(rec => scopes.push({ type:"plot", fmuNum, fmuLabel, rec }));
+  });
+  const total = scopes.length;
+  pcnt.textContent = `0 / ${total}`;
+
+  /* ── Tile URLs ── */
+  const TILE_URL   = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  const LABELS_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
+
+  /* ══════════════════════════════════════════════════════════════════
+     แก้ปัญหา polygon ไม่ขึ้น:
+     ใช้ L.canvas() แทน L.svg() — html2canvas จับ canvas element ได้โดยตรง
+     ════════════════════════════════════════════════════════════════ */
+  const map = L.map("mainMap", {
+    zoomControl: false, attributionControl: false,
+    zoomSnap: 0.1, zoomDelta: 0.5,
+    renderer: L.canvas({ padding: 0.5 }),   /* ← canvas renderer */
+  }).setView([17.4, 101.5], 11);
+
+  const tileBase = L.tileLayer(TILE_URL,   { maxZoom: 19, crossOrigin: "anonymous" }).addTo(map);
+                   L.tileLayer(LABELS_URL, { maxZoom: 19, opacity: 0.75, crossOrigin: "anonymous" }).addTo(map);
+
+  /* Add polygon layers ครั้งเดียว — restyle ทีละ scope */
+  const prodLayers = PRODUCTIVE.map(p =>
+    L.polygon(p.coordinates.map(c => [c[1], c[0]]), {
+      color: "#1b5e20", weight: 1.2, fillColor: "#2e7d32", fillOpacity: 0.65, interactive: false,
+    }).addTo(map)
+  );
+  WATER.forEach(p =>
+    L.polygon(p.coordinates.map(c => [c[1], c[0]]), {
+      color: "#01579b", weight: 1, fillColor: "#4fc3f7", fillOpacity: 0.75, interactive: false,
+    }).addTo(map)
+  );
+  const ltLayers = LANDTITLES.map(p =>
+    L.polygon(p.coordinates.map(c => [c[1], c[0]]), {
+      color: "#ffd600", weight: 1.5, fill: false, opacity: 0.6, interactive: false,
+    }).addTo(map)
+  );
+  IFL_POLYS.forEach(coords =>
+    L.polygon(coords, { color: "#1b5e20", weight: 1.5, fillColor: "#a5d6a7", fillOpacity: 0.45, interactive: false }).addTo(map)
+  );
+  WDPA_POLYS.forEach(ring =>
+    L.polygon(ring, { color: "#00695c", weight: 1.5, fillColor: "#80cbc4", fillOpacity: 0.5, interactive: false }).addTo(map)
+  );
+
+  /* ── Inset (ONE instance, reused) ── */
+  const inset = L.map("insetMap", {
+    zoomControl: false, attributionControl: false,
+    dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
+    renderer: L.canvas({ padding: 0.5 }),
+  }).setView([17.4, 101.5], 8);
+  L.tileLayer(TILE_URL, { maxZoom: 19, crossOrigin: "anonymous" }).addTo(inset);
+  const insetLyrs = PRODUCTIVE.map(p =>
+    L.polygon(p.coordinates.map(c => [c[1], c[0]]), {
+      color: "#1b5e20", weight: 1, fillColor: "#2e7d32", fillOpacity: 0.9, interactive: false,
+    }).addTo(inset)
+  );
+  if (insetLyrs.length) inset.fitBounds(L.featureGroup(insetLyrs).getBounds().pad(0.5));
+  inset.invalidateSize();
+  let insetMarker = null;
+
+  /* ── Update polygon styles ── */
+  function updateStyles(scope) {
+    const plotNames = new Set(
+      scope.type === "fmu"
+        ? scope.recs.map(r => r.plot).filter(Boolean)
+        : [scope.rec && scope.rec.plot].filter(Boolean)
+    );
+    prodLayers.forEach((layer, i) => {
+      const focused = plotNames.has(PRODUCTIVE[i].name);
+      const dim = !focused && scope.type === "fmu";
+      layer.setStyle({ weight: focused ? 2.5 : (dim ? 0.8 : 1.2), fillOpacity: focused ? 0.9 : (dim ? 0.2 : 0.65) });
+    });
+    ltLayers.forEach((layer, i) => {
+      const ltN = (LANDTITLES[i].name || "").split(",").map(s => s.trim());
+      const focused = ltN.some(n => plotNames.has(n));
+      layer.setStyle({ weight: focused ? 3 : 1.5, opacity: focused ? 1 : (scope.type === "fmu" ? 0.3 : 0.6) });
+    });
+    return plotNames;
+  }
+
+  /* ── Fit bounds ── */
+  function fitScope(scope, plotNames) {
+    let fc = [];
+    if (scope.type === "fmu") {
+      PRODUCTIVE.filter(p => plotNames.has(p.name)).forEach(p => fc.push(...p.coordinates));
+      LANDTITLES.filter(p => p.name && p.name.split(",").map(s=>s.trim()).some(n=>plotNames.has(n)))
+        .forEach(p => fc.push(...p.coordinates));
+    } else {
+      const r = scope.rec;
+      const prod = PRODUCTIVE.find(p => p.name === r.plot);
+      const lt   = LANDTITLES.find(p => p.name && p.name.split(",").map(s=>s.trim()).includes(r.plot));
+      if (prod)    fc = prod.coordinates;
+      else if (lt) fc = lt.coordinates;
+    }
+    if (fc.length) {
+      map.fitBounds(L.latLngBounds(fc.map(c => L.latLng(c[1], c[0]))).pad(scope.type === "fmu" ? 0.3 : 0.5), { animate: false });
+    } else if (scope.type === "plot" && scope.rec && scope.rec.lat && scope.rec.lng) {
+      map.setView([Number(scope.rec.lat), Number(scope.rec.lng)], 14, { animate: false });
+    } else {
+      map.setView([17.4, 101.5], 11, { animate: false });
+    }
+    map.invalidateSize();
+  }
+
+  /* ── Update header text ── */
+  function updateText(scope) {
+    let title, addr, summary, areaText;
+    if (scope.type === "fmu") {
+      const tot = scope.recs.reduce((s, r) => s + (Number(r.areaRai)||0), 0);
+      title    = `แผนที่แปลงปลูกยางพารา ${scope.fmuLabel}`;
+      addr     = buildAddr(scope.recs[0]);
+      summary  = `${scope.fmuLabel}  ·  ${scope.recs.length} แปลง  ·  เนื้อที่ ${fmtNum(tot,2)} ไร่`;
+      areaText = `พื้นที่ ${fmtNum(tot,2)} ไร่`;
+    } else {
+      const r = scope.rec;
+      title    = `แผนที่แปลงปลูกยางพารา  ${r.fmu} แปลง ${r.plot}`;
+      addr     = buildAddr(r);
+      summary  = `${r.fmu} แปลง ${r.plot}  ·  ${safe(r.nameTh)}  ·  เนื้อที่ ${fmtNum(r.areaRai,2)} ไร่`;
+      areaText = `พื้นที่ ${fmtNum(r.areaRai,2)} ไร่`;
+    }
+    document.getElementById("shTitle").textContent   = title;
+    document.getElementById("shAddr").textContent    = addr;
+    document.getElementById("shSummary").textContent = summary;
+    document.getElementById("shArea").textContent    = areaText;
+  }
+
+  /* ── Scale label ── */
+  function updateScale() {
+    const zoom = map.getZoom(), lat = map.getCenter().lat;
+    const mpp  = 40075016.686 * Math.cos(lat * Math.PI / 180) / (256 * Math.pow(2, zoom));
+    const sc   = mpp * 96 * 39.3701;
+    const nice = [500,1000,2500,5000,10000,25000,50000,100000,250000,500000,1000000,2000000];
+    const r    = nice.reduce((p, c) => Math.abs(c-sc) < Math.abs(p-sc) ? c : p);
+    document.getElementById("shScale").textContent = `มาตราส่วน 1:${r.toLocaleString("en-US")}`;
+    const fmt = v => v >= 1000 ? (+(v/1000).toFixed(1)) + " กม." : Math.round(v) + " ม.";
+    const totM = 0.032 * r;
+    document.getElementById("shSl1").textContent = fmt(totM/4);
+    document.getElementById("shSl2").textContent = fmt(totM/2);
+    document.getElementById("shSl3").textContent = fmt(totM);
+  }
+
+  /* ── Coordinate bar ── */
+  function updateCoordBar(scope) {
+    const bar = document.getElementById("coordBar");
+    if (scope.type !== "plot") { bar.style.display = "none"; return; }
+    const r = scope.rec;
+    let cLat = null, cLng = null;
+    const prod = PRODUCTIVE.find(p => p.name === r.plot);
+    const lt   = LANDTITLES.find(p => p.name && p.name.split(",").map(s=>s.trim()).includes(r.plot));
+    if (prod && prod.coordinates.length)  { const c = polyCentroid(prod.coordinates); cLat=c[0]; cLng=c[1]; }
+    else if (lt && lt.coordinates.length) { const c = polyCentroid(lt.coordinates);   cLat=c[0]; cLng=c[1]; }
+    else if (r.lat && r.lng)              { cLat=Number(r.lat); cLng=Number(r.lng); }
+    if (cLat === null) { bar.style.display = "none"; return; }
+    const utm = latLngToUTM(cLat, cLng);
+    bar.innerHTML = `
+      <div class="pcb-section"><span class="pcb-label">แปลง</span><span class="pcb-value">${r.fmu} · ${r.plot}</span></div>
+      <div class="pcb-section"><span class="pcb-label">เจ้าของ</span><span class="pcb-value">${safe(r.docOwnerTh||r.nameTh)}</span></div>
+      <div class="pcb-section"><span class="pcb-label">พิกัด UTM (Z${utm.zone})</span><span class="pcb-value pcb-mono">${utm.easting.toLocaleString("en-US")} E · ${utm.northing.toLocaleString("en-US")} N</span></div>
+      <div class="pcb-section"><span class="pcb-label">LAT / LNG (WGS84)</span><span class="pcb-value pcb-mono">${fmtLatLng(cLat,cLng)}</span></div>
+      <div class="pcb-section"><span class="pcb-label">พื้นที่</span><span class="pcb-value">${fmtNum(r.areaRai,2)} ไร่ · ${fmtNum(r.areaHa,4)} เฮกตาร์</span></div>`;
+    bar.style.display = "grid";   /* ตรงกับ .plot-coord-bar { display:grid } ใน style.css */
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     รอให้ <img> ทุกอันใน mainMap + insetMap โหลดเสร็จจริง ๆ
+     - รอ initialDelayMs ก่อน เพื่อให้ Leaflet ลบ tile เก่าและเริ่มโหลดอันใหม่
+     - polling ทุก 200ms จนกว่าทุก img จะ complete หรือ deadline หมด
+     ════════════════════════════════════════════════════════════════ */
+  function waitForMapTiles(maxMs, initialDelayMs) {
+    return new Promise(resolve => {
+      const deadline = setTimeout(resolve, maxMs);
+      setTimeout(function check() {
+        const imgs = [
+          ...document.querySelectorAll("#mainMap img"),
+          ...document.querySelectorAll("#insetMap img"),
+        ];
+        if (imgs.length === 0) { setTimeout(check, 200); return; }
+        const allDone = imgs.every(img => img.complete && img.naturalWidth > 0);
+        if (allDone) { clearTimeout(deadline); resolve(); }
+        else setTimeout(check, 200);
+      }, initialDelayMs || 0);
+    });
+  }
+
+  /* ── Main loop ── */
+  await sleep(500);
+  const pdf = new window.jspdf.jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  let firstPage = true;
+
+  for (let idx = 0; idx < scopes.length; idx++) {
+    const scope = scopes[idx];
+    const label = scope.type === "fmu"
+      ? `${scope.fmuLabel} (ภาพรวม)`
+      : `${scope.rec.fmu} · ${scope.rec.plot}`;
+
+    pmsg.textContent  = `กำลังสร้าง: ${label}`;
+    pcnt.textContent  = `${idx + 1} / ${total}`;
+    pfill.style.width = `${((idx+1)/total*100).toFixed(1)}%`;
+
+    updateText(scope);
+    updateCoordBar(scope);
+    const plotNames = updateStyles(scope);
+    fitScope(scope, plotNames);
+
+    /* รอ tile โหลดจริง:
+       - delay 300ms ก่อนเพื่อให้ Leaflet ลบ tile เก่าและเริ่มร้องขอ tile ใหม่
+       - polling สูงสุด 5 วินาที                                              */
+    await waitForMapTiles(5000, 300);
+
+    /* อัปเดต inset marker ก่อน redraw เพื่อให้ติดภาพ */
+    const mc = map.getCenter();
+    if (insetMarker) inset.removeLayer(insetMarker);
+    insetMarker = L.circleMarker([mc.lat, mc.lng], {
+      radius: 6, color: "#fff", weight: 2, fillColor: "#d32f2f", fillOpacity: 1, interactive: false,
+    }).addTo(inset);
+    inset.invalidateSize();
+
+    /* Force canvas redraw หลัง setStyle, fitBounds และ marker update */
+    map.fire("moveend");
+    inset.fire("moveend");
+    await sleep(500);   /* รอให้ canvas วาดใหม่เสร็จ */
+    updateScale();
+
+    /* Capture — onclone คัดลอก pixel ของ canvas ต้นฉบับไปยัง clone โดยตรง */
+    let canvas;
+    try {
+      const origCanvases = [...document.querySelectorAll("#mapSheet canvas")];
+      canvas = await html2canvas(document.getElementById("mapSheet"), {
+        useCORS: true,
+        allowTaint: false,
+        scale: 2,
+        logging: false,
+        imageTimeout: 15000,
+        onclone: (doc, el) => {
+          /* ให้ canvas clone มองเห็นได้ + คัดลอก pixel จากต้นฉบับ */
+          const clonedCanvases = [...el.querySelectorAll("canvas")];
+          clonedCanvases.forEach((cc, i) => {
+            cc.style.display = "block";
+            const src = origCanvases[i];
+            if (!src) return;
+            try {
+              const ctx = cc.getContext("2d");
+              cc.width  = src.width;
+              cc.height = src.height;
+              ctx.drawImage(src, 0, 0);
+            } catch(e) { /* tainted canvas — html2canvas จะ skip */ }
+          });
+        },
+      });
+    } catch (e) {
+      console.error("[html2canvas]", e);
+      continue;
+    }
+
+    const imgData = canvas.toDataURL("image/jpeg", 0.92);
+    if (!firstPage) pdf.addPage();
+    pdf.addImage(imgData, "JPEG", 0, 0, 210, 297);
+    firstPage = false;
+    await sleep(50);   /* ป้องกัน UI freeze ระหว่างหน้า */
+  }
+
+  /* ── เสร็จสิ้น ── */
+  pmsg.textContent  = `✅ สร้างครบ ${total} หน้า — กดดาวน์โหลด`;
+  pfill.style.width = "100%";
+  pcnt.textContent  = `${total} / ${total}`;
+
+  function doSave() { pdf.save("FSC_แผนที่รวม_FMU.pdf"); }
+
+  /* ปุ่มบน progress bar */
+  const dlBtn = document.getElementById("dlBtn");
+  dlBtn.style.display = "inline-block";
+  dlBtn.onclick = doSave;
+
+  /* ปุ่มที่ 2 ใต้ sheet — มองเห็นได้โดยไม่ต้อง scroll */
+  const dlBtn2 = document.createElement("button");
+  dlBtn2.textContent = "⬇️ ดาวน์โหลด PDF  —  FSC_แผนที่รวม_FMU.pdf";
+  dlBtn2.onclick = doSave;
+  Object.assign(dlBtn2.style, {
+    display: "block", margin: "20px auto 48px",
+    padding: "16px 48px", fontSize: "1.1em", fontWeight: "700",
+    background: "#69f0ae", color: "#1b5e20",
+    border: "none", borderRadius: "10px", cursor: "pointer",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+  });
+  document.getElementById("sheetWrap").after(dlBtn2);
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+})();
+</script>
+</body>
+</html>

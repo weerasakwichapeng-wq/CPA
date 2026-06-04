@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FSC ตรวจสอบย้อนกลับ - เถ้าแก่น้อยยางพารา</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">🌳</div>
+      <div>
+        <h1>บริษัท เจริญโภคภัณฑ์การเกษตรกร จำกัด</h1>
+        <div class="subtitle">ระบบตรวจสอบย้อนกลับยางพารายั่งยืน</div>
+      </div>
+    </div>
+    <nav class="mainnav">
+      <a href="#/dashboard" data-route="dashboard" data-requires-role="viewer">📊 แดชบอร์ด</a>
+      <a href="#/map" data-route="map" data-requires-role="viewer">🗺️ แผนที่ดาวเทียม</a>
+      <a href="#/trace" data-route="trace" data-requires-role="viewer">🔍 ตรวจสอบย้อนกลับ</a>
+      <a href="#/farmers" data-route="farmers" data-requires-role="manager">👥 เกษตรกร</a>
+      <a href="#/lots" data-route="lots" data-requires-role="manager">📦 ล็อตรับซื้อ</a>
+      <a href="#/report" data-route="report" data-requires-role="manager">📋 สร้างแผนที่รายงาน</a>
+      <a href="#/add" data-route="add" data-requires-role="manager">➕ บันทึกข้อมูลใหม่</a>
+      <a href="#/users" data-route="users" data-requires-role="admin">👤 จัดการบัญชี</a>
+    </nav>
+    <div class="user-chip" id="userChip"></div>
+  </header>
+
+  <main id="view"></main>
+
+  <footer class="footer">
+    <span>ระบบจัดการข้อมูล FSC · ข้อมูล <span id="dataCount"></span></span>
+    <span>© 2026 เถ้าแก่น้อยยางพารา</span>
+  </footer>
+
+  <!-- Templates -->
+  <template id="tpl-dashboard">
+    <div class="page">
+      <h2>แดชบอร์ดข้อมูลรวม</h2>
+      <div class="stat-grid">
+        <div class="stat-card stat-blue">
+          <div class="stat-num" id="statMembers">-</div>
+          <div class="stat-label">สมาชิก/แปลง</div>
+        </div>
+        <div class="stat-card stat-green">
+          <div class="stat-num" id="statFMU">-</div>
+          <div class="stat-label">FMU (หน่วยจัดการ)</div>
+        </div>
+        <div class="stat-card stat-orange">
+          <div class="stat-num" id="statArea">-</div>
+          <div class="stat-label">พื้นที่รวม (ไร่)</div>
+        </div>
+        <div class="stat-card stat-cyan">
+          <div class="stat-num" id="statWater">-</div>
+          <div class="stat-label">🔵 แหล่งน้ำ</div>
+        </div>
+        <div class="stat-card stat-purple">
+          <div class="stat-num" id="statDocs">-</div>
+          <div class="stat-label">📄 เอกสารสิทธิ์</div>
+        </div>
+      </div>
+
+
+      <section class="panel panel-quota highlight-panel">
+        <div class="panel-head">
+          <h3>💰 ผลผลิตยางแห้งที่ซื้อได้ต่อปี</h3>
+        </div>
+        <div class="quota-grid" id="annualYieldStats"></div>
+      </section>
+
+      <div class="dash-grid-12">
+        <!-- Row 1: 4 compact donut charts (small multiples) -->
+        <section class="panel col-3 donut-panel">
+          <div class="chart-head"><h3>เพศ</h3><span class="chart-sub">Gender</span></div>
+          <div id="genderChart"></div>
+        </section>
+        <section class="panel col-3 donut-panel">
+          <div class="chart-head"><h3>การจัดการแปลง</h3><span class="chart-sub">Management</span></div>
+          <div id="managementChart"></div>
+        </section>
+        <section class="panel col-3 donut-panel">
+          <div class="chart-head"><h3>สายพันธุ์ยางพารา</h3><span class="chart-sub">Species</span></div>
+          <div id="speciesChart"></div>
+        </section>
+        <section class="panel col-3 donut-panel">
+          <div class="chart-head"><h3>พื้นที่ตามอำเภอ</h3><span class="chart-sub">District</span></div>
+          <div id="districtChart"></div>
+        </section>
+
+        <!-- Row 2: Two medium horizontal-bar charts -->
+        <section class="panel col-6">
+          <div class="chart-head"><h3>ระบบแบ่งกรีด</h3><span class="chart-sub">Tapping contract</span></div>
+          <div id="contractChart" class="bar-chart"></div>
+        </section>
+        <section class="panel col-6">
+          <div class="chart-head"><h3>ประเภทเอกสารสิทธิ์</h3><span class="chart-sub">Land title type</span></div>
+          <div id="docTypeChart" class="bar-chart"></div>
+        </section>
+
+        <!-- Row 2.5: Land titles per subdistrict -->
+        <section class="panel col-12">
+          <div class="chart-head"><h3>📄 เอกสารสิทธิ์ต่อตำบล แยกตามประเภท</h3><span class="chart-sub">Land titles by subdistrict &amp; type · นับไม่ซ้ำ</span></div>
+          <div id="docPerSubdistrictChart"></div>
+        </section>
+
+        <!-- Row 3: Stacked bar (full width) + HUB donut -->
+        <section class="panel col-8">
+          <div class="chart-head"><h3>องค์ประกอบพื้นที่ทั้งหมด</h3><span class="chart-sub">Land use composition</span></div>
+          <div id="areaTypeChart"></div>
+        </section>
+        <section class="panel col-4 donut-panel">
+          <div class="chart-head"><h3>HUB รับซื้อยาง</h3><span class="chart-sub">Annual cup lump</span></div>
+          <div id="hubChart"></div>
+        </section>
+
+        <!-- Wood plan 5yr + 25yr -->
+        <section class="panel col-12 wood-plan-panel">
+          <div class="chart-head">
+            <h3>🌳 แผนการทำไม้</h3>
+            <span class="chart-sub">Timber Harvesting Plan · อ้างอิงปีตัดโค่นจริง (cutBEActual)</span>
+          </div>
+          <div class="wood-plan-layout">
+            <div id="woodPlan5yr" class="wood-5yr-wrap"></div>
+            <div id="woodPlan25yr" class="wood-25yr-wrap"></div>
+          </div>
+        </section>
+
+        <!-- Row 4: Recent activity table -->
+        <section class="panel col-12">
+          <div class="chart-head"><h3>กิจกรรมล่าสุด</h3><span class="chart-sub">Recent plot updates</span></div>
+          <table class="data-table" id="recentTable">
+            <thead><tr><th>FMU</th><th>ชื่อ-สกุล</th><th>พื้นที่ (ไร่)</th><th>สายพันธุ์</th><th>ตำบล/อำเภอ</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-farmers">
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h2>รายชื่อเกษตรกร / แปลงปลูก</h2>
+          <p class="page-sub">Members & Plots</p>
+        </div>
+        <span class="count-badge" id="resultCount"></span>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="searchInput" placeholder="🔍 ค้นหา ชื่อ, FMU, รหัสสมาชิก, เลขเอกสาร, ตำบล...">
+        <select id="filterFMU"><option value="">ทุก FMU</option></select>
+        <select id="filterDocType"><option value="">ทุกประเภทเอกสาร</option></select>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="farmersTable">
+          <thead>
+            <tr>
+              <th>#</th><th>RMU</th><th>FMU</th><th>แปลง</th><th>ชื่อ-สกุล</th><th>เบอร์โทร</th>
+              <th>เอกสารสิทธิ์</th><th>เลขที่</th><th>พื้นที่ (ไร่)</th><th>สายพันธุ์</th><th>ตำบล</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-farmer-detail">
+    <div class="page">
+      <div class="detail-topbar">
+        <a href="#/farmers" class="back-link">← กลับรายชื่อ</a>
+        <div class="actions-bar">
+          <button class="btn btn-primary" id="reportBtn">📋 สร้างแผนที่รายแปลง</button>
+          <button class="btn btn-fsc" id="complianceBtn">📑 รายงาน FSC Compliance</button>
+          <button class="btn" id="editBtn">✏️ แก้ไขข้อมูล</button>
+          <button class="btn btn-secondary" id="printBtn">🖨️ พิมพ์</button>
+        </div>
+      </div>
+
+      <div class="detail-header">
+        <div>
+          <h2 id="dNameTh"></h2>
+          <div class="muted" id="dNameEn"></div>
+        </div>
+        <div class="badges">
+          <span class="badge" id="dFmu"></span>
+          <span class="badge badge-blue" id="dPlot"></span>
+        </div>
+      </div>
+
+      <div class="dash-grid-12">
+        <!-- Row 0: Quota highlight at top -->
+        <section class="panel panel-quota col-12">
+          <div class="panel-head">
+            <h3>📊 โควต้าขายผลผลิต</h3>
+            <button class="btn btn-small btn-secondary" id="editQuotaBtn">✏️ แก้ไขโควต้า</button>
+          </div>
+          <div class="quota-grid" id="quotaView"></div>
+          <form class="quota-form" id="quotaForm" style="display:none">
+            <label>ผลผลิตต่อไร่ (กก./ไร่/ปี)
+              <input type="number" name="yieldPerRai" step="0.01" placeholder="เช่น 280">
+            </label>
+            <label>ปริมาณส่งยางได้ต่อรอบ (กก.)
+              <input type="number" name="deliveryPerRound" step="0.01" placeholder="เช่น 1500">
+            </label>
+            <label>จำนวนกระสอบที่ได้รับ (ใบ)
+              <input type="number" name="sacksReceived" step="1" placeholder="เช่น 30">
+            </label>
+            <label>ราคารับซื้อ (บาท/กก.)
+              <input type="number" name="pricePerKg" step="0.01" placeholder="เช่น 65.50">
+            </label>
+            <label>รอบส่งล่าสุด (วันที่)
+              <input type="date" name="lastDeliveryDate">
+            </label>
+            <label>หมายเหตุ
+              <input type="text" name="quotaNote" placeholder="เช่น ส่งทุก 15 วัน">
+            </label>
+            <div class="quota-actions">
+              <button type="submit" class="btn btn-primary">💾 บันทึก</button>
+              <button type="button" class="btn" id="cancelQuotaBtn">ยกเลิก</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Row 1: 3 info panels equal width -->
+        <section class="panel col-4">
+          <div class="chart-head"><h3>ข้อมูลส่วนตัว</h3><span class="chart-sub">Personal</span></div>
+          <dl class="kv" id="kvPersonal"></dl>
+        </section>
+        <section class="panel col-4">
+          <div class="chart-head"><h3>ข้อมูลแปลง</h3><span class="chart-sub">Plot</span></div>
+          <dl class="kv" id="kvPlot"></dl>
+        </section>
+        <section class="panel col-4">
+          <div class="chart-head"><h3>การจัดการ & ผู้รับผิดชอบ</h3><span class="chart-sub">Management</span></div>
+          <dl class="kv" id="kvMgmt"></dl>
+        </section>
+
+        <!-- Row 2: Doc info + Chemicals -->
+        <section class="panel col-6">
+          <div class="chart-head"><h3>เอกสารสิทธิ์ (ข้อมูล)</h3><span class="chart-sub">Land title info</span></div>
+          <dl class="kv" id="kvDoc"></dl>
+          <div id="docFiles"></div>
+        </section>
+        <section class="panel col-6">
+          <div class="chart-head"><h3>🧪 การใช้สารเคมี</h3><span class="chart-sub">Chemicals</span></div>
+          <dl class="kv" id="kvChem"></dl>
+        </section>
+
+        <!-- Row 3: Wood plan -->
+        <section class="panel col-12">
+          <div class="chart-head"><h3>🌳 แผนทำไม้ 25 ปี</h3><span class="chart-sub">Wood plan</span></div>
+          <dl class="kv kv-grid" id="kvWood"></dl>
+        </section>
+
+        <!-- Row 4: Application documents (เอกสารการสมัคร) — full width on top -->
+        <section class="panel panel-application col-12" id="panelApplication" style="display:none">
+          <div class="panel-head">
+            <h3>📝 เอกสารการสมัคร</h3>
+            <span class="app-fmu-tag" id="appFmuTag"></span>
+          </div>
+          <p class="muted" id="appNote"></p>
+          <div class="app-doc-list" id="appDocList"></div>
+        </section>
+
+        <!-- Row 4.5: FSC supporting evidence (e.g., SPK declaration before 2537) -->
+        <section class="panel panel-fsc-evidence col-12" id="panelFscEvidence" style="display:none">
+          <div class="panel-head">
+            <h3>📜 หลักฐานประกอบ FSC</h3>
+            <span class="fsc-evidence-tag" id="fscEvidenceTag"></span>
+          </div>
+          <p class="muted" id="fscEvidenceNote"></p>
+          <div class="fsc-evidence-list" id="fscEvidenceList"></div>
+        </section>
+
+        <!-- Row 5: Land title PDF + Tax PDF -->
+        <section class="panel panel-landtitle col-6" id="panelLandTitle" style="display:none">
+          <div class="panel-head">
+            <h3>📄 เอกสารสิทธิ์ที่ดิน (ไฟล์)</h3>
+            <span class="lt-fmu-tag" id="ltFmuTag"></span>
+          </div>
+          <p class="muted" id="ltNote"></p>
+          <div class="lt-doc-list" id="ltDocList"></div>
+          <div class="lt-user-files" id="ltUserFiles"></div>
+        </section>
+        <section class="panel panel-tax col-6" id="panelTax" style="display:none">
+          <div class="panel-head">
+            <h3>📋 เอกสารการเสียภาษีที่ดิน</h3>
+            <span class="tax-fmu-tag" id="taxFmuTag"></span>
+          </div>
+          <p class="muted" id="taxNote"></p>
+          <div class="tax-doc-list" id="taxDocList"></div>
+        </section>
+
+        <!-- Row 6: Map -->
+        <section class="panel col-12">
+          <div class="chart-head"><h3>🛰️ แผนที่ดาวเทียม (Polygon แปลงปลูก)</h3><span class="chart-sub">Satellite map</span></div>
+          <div id="detailMap" class="detail-map"></div>
+        </section>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-map">
+    <div class="page page-map">
+      <div class="map-toolbar">
+        <h2>แผนที่ภาพถ่ายดาวเทียม</h2>
+        <label class="basemap-picker">
+          🛰️ ภาพดาวเทียม:
+          <select id="mapBasemapYear">
+            <option value="current">📅 ภาพปัจจุบัน</option>
+            <option value="y2536">🕰️ พ.ศ. 2536 (FSC pre-1994)</option>
+          </select>
+        </label>
+        <label class="lyr-prod"><input type="checkbox" id="togProductive" checked> 🟩 พื้นที่ให้ผลผลิต (<span id="cntProd"></span>)</label>
+        <label class="lyr-water"><input type="checkbox" id="togWater" checked> 🔵 แหล่งน้ำ (<span id="cntWater"></span>)</label>
+        <label class="lyr-lt"><input type="checkbox" id="togLandTitle" checked> 🟨 เอกสารสิทธิ์ (<span id="cntLT"></span>)</label>
+        <label class="lyr-ifl"><input type="checkbox" id="togIFL"> 🟢 IFL Intact Forest <span class="lyr-year">(2025)</span></label>
+        <label class="lyr-wdpa"><input type="checkbox" id="togWDPA"> 🟦 WDPA Protected <span class="lyr-year">(2026)</span></label>
+        <input type="search" id="mapSearch" placeholder="🔍 ค้นหา FMU หรือชื่อ...">
+        <button class="btn btn-small" id="fitAllBtn">📍 ดูทั้งหมด</button>
+      </div>
+      <div id="bigMap" class="big-map"></div>
+    </div>
+  </template>
+
+  <template id="tpl-documents">
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h2>คลังเอกสารสิทธิ์</h2>
+          <p class="page-sub">Land Title Document Archive</p>
+        </div>
+        <span class="count-badge" id="docCount"></span>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="docSearch" placeholder="🔍 ค้นหา เลขเอกสาร, ประเภท, ชื่อเจ้าของ...">
+      </div>
+      <div class="doc-list" id="docList"></div>
+    </div>
+  </template>
+
+  <template id="tpl-trace">
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h2>🔍 ตรวจสอบย้อนกลับ FSC</h2>
+          <p class="page-sub">FSC Traceability — ค้นหาที่มาของวัตถุดิบยางพารา</p>
+        </div>
+      </div>
+      <section class="panel highlight-panel">
+        <div class="trace-search">
+          <input type="search" id="traceInput" placeholder="รหัสสมาชิก / FMU / เลขเอกสารสิทธิ์ / ชื่อเกษตรกร" autofocus>
+          <button class="btn btn-primary" id="traceBtn">🔍 ตรวจสอบ</button>
+        </div>
+      </section>
+      <div id="traceResult"></div>
+    </div>
+  </template>
+
+  <template id="tpl-add">
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h2 id="addTitle">➕ บันทึกข้อมูลเกษตรกร / แปลงปลูก</h2>
+          <p class="page-sub">Add / Edit Member Record</p>
+        </div>
+      </div>
+      <p class="muted" style="margin-bottom:14px">ข้อมูลที่กรอกจะถูกบันทึกในเครื่อง (localStorage) สามารถส่งออก JSON เพื่อรวมเข้าระบบกลางได้</p>
+      <form id="addForm" class="form-grid">
+        <fieldset>
+          <legend>ข้อมูลสมาชิก</legend>
+          <label>FMU <input name="fmu" required placeholder="เช่น FMU76"></label>
+          <label>รหัสแปลง <input name="plot" placeholder="เช่น FMU76-1"></label>
+          <label>รหัสสมาชิก <input name="memberId"></label>
+          <label>เพศ
+            <select name="gender"><option>ชาย</option><option>หญิง</option></select>
+          </label>
+          <label>เลขบัตรประชาชน <input name="idCard"></label>
+          <label>ชื่อ-สกุล (ไทย) <input name="nameTh" required></label>
+          <label>Name (English) <input name="nameEn"></label>
+          <label>เบอร์โทร <input name="phone"></label>
+          <label>อายุ <input name="age" type="number"></label>
+          <label>เลขทะเบียนเกษตรกรชาวสวนยาง <input name="rubberRegNo"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>เอกสารสิทธิ์</legend>
+          <label>ประเภทเอกสาร
+            <select name="docType">
+              <option value="">-</option>
+              <option>น.ส.4 จ.</option><option>น.ส.3 ก.</option><option>น.ส.3</option>
+              <option>ส.ป.ก. 4-01</option><option>ก.ส.น.3</option><option>ก.ส.น.5</option><option>อื่นๆ</option>
+            </select>
+          </label>
+          <label>เลขที่เอกสาร <input name="docNo"></label>
+          <label>ชื่อเจ้าของเอกสารสิทธิ์ <input name="docOwnerTh"></label>
+          <label>ความสัมพันธ์ <input name="relation" placeholder="เจ้าของสวนยาง / ภรรยา / ฯลฯ"></label>
+          <label>การชำระภาษีที่ดิน
+            <select name="taxStatus"><option value="">-</option><option>ชำระแล้ว</option><option>ได้รับการยกเว้น</option><option>ค้างชำระ</option></select>
+          </label>
+          <label class="file-label">📎 แนบไฟล์เอกสารสิทธิ์ (PDF/รูป)
+            <input name="docFile" type="file" accept="image/*,application/pdf">
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>ข้อมูลแปลงปลูก</legend>
+          <label>ไร่ <input name="rai" type="number" step="0.01"></label>
+          <label>งาน <input name="ngan" type="number" step="0.01"></label>
+          <label>ตร.วา <input name="sqWah" type="number" step="0.01"></label>
+          <label>พื้นที่รวม (ไร่) <input name="areaRai" type="number" step="0.01"></label>
+          <label>พ.ศ.ที่ปลูก <input name="plantBE" type="number"></label>
+          <label>อายุยาง (ปี) <input name="rubberAge" type="number"></label>
+          <label>ระยะปลูก <input name="spacing" placeholder="เช่น 3X7"></label>
+          <label>สายพันธุ์
+            <input name="species" list="speciesList" placeholder="เช่น RRIM600">
+            <datalist id="speciesList">
+              <option value="RRIM600"><option value="RRIT251"><option value="JVP80">
+            </datalist>
+          </label>
+          <label>หมู่ที่ <input name="moo"></label>
+          <label>ชื่อหมู่บ้าน <input name="village"></label>
+          <label>ตำบล <input name="subdistrict"></label>
+          <label>อำเภอ <input name="district"></label>
+          <label>จังหวัด <input name="province"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>📊 โควต้าขายผลผลิต</legend>
+          <label>ผลผลิตต่อไร่ (กก./ไร่/ปี) <input name="yieldPerRai" type="number" step="0.01"></label>
+          <label>ปริมาณส่งยางได้ต่อรอบ (กก.) <input name="deliveryPerRound" type="number" step="0.01"></label>
+          <label>จำนวนกระสอบที่ได้รับ (ใบ) <input name="sacksReceived" type="number" step="1"></label>
+          <label>ราคารับซื้อ (บาท/กก.) <input name="pricePerKg" type="number" step="0.01"></label>
+          <label>รอบส่งล่าสุด <input name="lastDeliveryDate" type="date"></label>
+          <label class="full">หมายเหตุโควต้า <input name="quotaNote"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Polygon แปลง (Lat,Lng - ห่างด้วย newline)</legend>
+          <label class="full">
+            พิกัดมุมแปลง (lng,lat ต่อบรรทัด)
+            <textarea name="coordinates" rows="6" placeholder="101.5811,17.2924
+101.5811,17.2922
+101.5816,17.2910"></textarea>
+          </label>
+          <span class="muted">หรือเปิดบนแผนที่แล้วคลิกวาง pin → ระบบจะแปะ polygon ให้</span>
+        </fieldset>
+
+        <div class="actions-bar full">
+          <button type="submit" class="btn btn-primary">💾 บันทึก</button>
+          <button type="button" class="btn btn-secondary" id="exportBtn">📤 ส่งออก JSON ที่บันทึกไว้</button>
+          <button type="reset" class="btn">↺ ล้างฟอร์ม</button>
+        </div>
+      </form>
+      <section class="panel" id="customRecordsPanel" style="display:none">
+        <h3>📥 ข้อมูลที่บันทึกในเครื่อง (<span id="customCount"></span>)</h3>
+        <table class="data-table" id="customTable">
+          <thead><tr><th>FMU</th><th>ชื่อ-สกุล</th><th>พื้นที่</th><th>วันที่บันทึก</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <template id="tpl-ltfix">
+    <div class="page">
+      <h2>🔧 เครื่องมือจับคู่เอกสารสิทธิ์ ↔ FMU</h2>
+      <p class="muted">ตรวจสอบและแก้ไขชื่อไฟล์ PDF ที่ไม่ตรงกับเจ้าของ FMU จริง — บันทึกในเครื่อง (localStorage)</p>
+      <div class="ltfix-toolbar">
+        <span class="count-badge" id="ltfixCount"></span>
+        <button class="btn btn-small" id="ltfixOnlyMismatched">⚠️ ดูเฉพาะที่แก้ไขแล้ว</button>
+        <button class="btn btn-small btn-primary" id="ltfixExport">📤 ส่งออก mapping</button>
+        <button class="btn btn-small" id="ltfixReset">↺ รีเซ็ตทั้งหมด</button>
+      </div>
+      <p class="muted" style="margin-top:8px">
+        💡 <b>วิธีใช้:</b> 1) กดเปิดดู PDF 2) อ่านชื่อเจ้าของในเอกสาร 3) เลือก FMU ที่ถูกต้องจาก dropdown 4) ระบบบันทึกอัตโนมัติ
+      </p>
+      <div class="ltfix-grid" id="ltfixGrid"></div>
+    </div>
+  </template>
+
+  <template id="tpl-setup">
+    <div class="page page-auth">
+      <div class="auth-card">
+        <div class="auth-logo">🌳</div>
+        <h2>ตั้งค่าครั้งแรก</h2>
+        <p class="muted">ยังไม่มีบัญชี admin ในระบบ — โปรดสร้างบัญชี admin บัญชีแรกเพื่อเริ่มใช้งาน</p>
+        <form id="setupForm" class="auth-form">
+          <label>ชื่อผู้ใช้ (Username)
+            <input name="username" required minlength="3" autocomplete="username" placeholder="admin">
+          </label>
+          <label>ชื่อแสดงผล (เช่น "อ.อ้อย")
+            <input name="displayName" required>
+          </label>
+          <label>รหัสผ่าน
+            <input name="password" type="password" required minlength="6" autocomplete="new-password" placeholder="อย่างน้อย 6 ตัวอักษร">
+          </label>
+          <label>ยืนยันรหัสผ่าน
+            <input name="passwordConfirm" type="password" required minlength="6" autocomplete="new-password">
+          </label>
+          <div class="auth-warn">
+            ⚠️ ระบบเก็บรหัสผ่านแบบ SHA-256 hash ใน localStorage ของเบราว์เซอร์ — เหมาะกับ <b>internal access control</b> ไม่ใช่ระบบป้องกัน hack ระดับสูง
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">🔐 สร้างบัญชี admin</button>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-login">
+    <div class="page page-auth">
+      <div class="auth-card">
+        <div class="auth-logo">🔐</div>
+        <h2>เข้าสู่ระบบ</h2>
+        <p class="muted">สำหรับ manager / admin เพื่อจัดการล็อตรับซื้อ</p>
+        <form id="loginForm" class="auth-form">
+          <label>ชื่อผู้ใช้
+            <input name="username" required autocomplete="username" autofocus>
+          </label>
+          <label>รหัสผ่าน
+            <input name="password" type="password" required autocomplete="current-password">
+          </label>
+          <div id="loginError" class="auth-error" style="display:none"></div>
+          <button type="submit" class="btn btn-primary btn-block">เข้าสู่ระบบ</button>
+        </form>
+        <p class="auth-foot muted">
+          ไม่มีบัญชี? ติดต่อ admin · หรือ <a href="#/dashboard">← กลับไปดูข้อมูลทั่วไป</a>
+        </p>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-users">
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h2>👤 จัดการบัญชีผู้ใช้</h2>
+          <p class="page-sub">User Management — admin เท่านั้น</p>
+        </div>
+        <span class="count-badge" id="usrCount"></span>
+      </div>
+
+      <section class="panel">
+        <h3 style="margin-top:0">➕ เพิ่มผู้ใช้ใหม่</h3>
+        <form id="userAddForm" class="form-grid">
+          <label>ชื่อผู้ใช้ <input name="username" required minlength="3"></label>
+          <label>ชื่อแสดงผล <input name="displayName" required></label>
+          <label>ระดับสิทธิ์
+            <select name="role" required>
+              <option value="viewer">viewer (ดูเฉพาะแดชบอร์ด/แผนที่/ตรวจสอบย้อนกลับ)</option>
+              <option value="manager" selected>manager (จัดการล็อต/เกษตรกร/รายงาน)</option>
+              <option value="admin">admin (จัดการบัญชีทั้งหมด)</option>
+            </select>
+          </label>
+          <label>รหัสผ่าน <input name="password" type="password" required minlength="6"></label>
+          <div class="actions-bar full">
+            <button type="submit" class="btn btn-primary">➕ เพิ่มผู้ใช้</button>
+            <button type="reset" class="btn">ล้าง</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h3>📋 บัญชีทั้งหมด</h3>
+        <table class="data-table" id="usersTable">
+          <thead>
+            <tr><th>Username</th><th>ชื่อ</th><th>ระดับ</th><th>วันที่สร้าง</th><th>เข้าใช้ล่าสุด</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h3>🔒 เปลี่ยนรหัสผ่านของฉัน</h3>
+        <form id="userPwdForm" class="form-grid">
+          <label>รหัสผ่านเดิม <input name="oldPassword" type="password" required></label>
+          <label>รหัสผ่านใหม่ <input name="newPassword" type="password" required minlength="6"></label>
+          <label>ยืนยันรหัสผ่านใหม่ <input name="newPasswordConfirm" type="password" required minlength="6"></label>
+          <div class="actions-bar full">
+            <button type="submit" class="btn btn-primary">🔐 เปลี่ยนรหัส</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </template>
+
+  <template id="tpl-lots">
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h2>📦 ล็อตรับซื้อ</h2>
+          <p class="page-sub">Purchase Lots — รวมการรับซื้อยางจากหลายแปลงเข้าเป็นล็อต</p>
+        </div>
+        <span class="count-badge" id="lotCount"></span>
+      </div>
+
+      <div class="lots-toolbar">
+        <input type="search" id="lotSearch" placeholder="🔍 ค้นหา เลขล็อต, HUB, รูปแบบผลิต, FMU...">
+        <select id="lotFilterMonth"><option value="">ทุกเดือน</option></select>
+        <select id="lotFilterStatus">
+          <option value="">ทุกสถานะ</option>
+          <option value="Open">เปิด</option>
+          <option value="Closed">ปิด</option>
+          <option value="Shipped">ส่งมอบแล้ว</option>
+        </select>
+        <a href="#/lots/new" class="btn btn-primary">➕ สร้างล็อตใหม่</a>
+        <button class="btn btn-secondary" id="lotExportBtn">📤 Export ทั้งหมด</button>
+        <button class="btn" id="lotImportBtn">📥 Import JSON</button>
+        <input type="file" id="lotImportFile" accept=".json,.js" style="display:none">
+      </div>
+
+      <section class="panel panel-quota">
+        <div class="quota-grid" id="lotStats"></div>
+      </section>
+
+      <div class="table-wrap">
+        <table class="data-table" id="lotsTable">
+          <thead>
+            <tr>
+              <th>เลขล็อต</th>
+              <th>วันที่</th>
+              <th>HUB</th>
+              <th>สินค้า</th>
+              <th>FSC Claim</th>
+              <th>น้ำหนัก (กก.)</th>
+              <th>DRC (กก.)</th>
+              <th>แปลง</th>
+              <th>สถานะ</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-lot-new">
+    <div class="page">
+      <div class="detail-topbar">
+        <a href="#/lots" class="back-link">← กลับรายการล็อต</a>
+      </div>
+      <div class="page-header">
+        <div>
+          <h2 id="lotFormTitle">➕ สร้างล็อตใหม่</h2>
+          <p class="page-sub">Create New Purchase Lot</p>
+        </div>
+        <div class="lot-id-preview">
+          <div class="lot-id-label">เลขล็อต (auto)</div>
+          <div class="lot-id-value" id="lotIdPreview">LOT-—</div>
+        </div>
+      </div>
+
+      <form id="lotForm" class="form-grid">
+        <fieldset>
+          <legend>ข้อมูลล็อต</legend>
+          <label>วันที่รับซื้อ <input name="purchaseDate" type="date" required></label>
+          <label>HUB ที่รับซื้อ
+            <input name="hub" list="hubList" placeholder="เช่น Hub CPA01" required>
+            <datalist id="hubList"></datalist>
+          </label>
+          <label>ผู้ซื้อ (Buyer)
+            <input name="buyer" value="บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด">
+          </label>
+          <label>รูปแบบผลิต
+            <select name="productForm" required>
+              <option value="ยางก้อนถ้วย (Cup Lump)">ยางก้อนถ้วย (Cup Lump)</option>
+              <option value="ยางแผ่นรมควัน (RSS)">ยางแผ่นรมควัน (RSS)</option>
+              <option value="น้ำยางสด (Latex)">น้ำยางสด (Latex)</option>
+              <option value="ยางแท่ง (STR)">ยางแท่ง (STR)</option>
+              <option value="ยางเครพ (Crepe)">ยางเครพ (Crepe)</option>
+            </select>
+          </label>
+          <label>FSC Claim
+            <select name="fscClaim" required>
+              <option value="FSC 100%">FSC 100%</option>
+              <option value="FSC Mix">FSC Mix</option>
+              <option value="FSC Controlled Wood">FSC Controlled Wood</option>
+            </select>
+          </label>
+          <label>DRC % (สำหรับคำนวณยางแห้ง)
+            <input name="drcPercent" type="number" step="0.1" value="65" min="0" max="100">
+          </label>
+          <label>เลขใบส่งของ (Transfer Doc)
+            <input name="transferDocNo" placeholder="เช่น TF-2026-0014">
+          </label>
+          <label>สถานะ
+            <select name="status">
+              <option value="Open">เปิด (Open)</option>
+              <option value="Closed">ปิดล็อต (Closed)</option>
+              <option value="Shipped">ส่งมอบแล้ว (Shipped)</option>
+            </select>
+          </label>
+          <label class="full">หมายเหตุ
+            <textarea name="note" rows="2" placeholder="เช่น ส่งมอบ 16 พ.ค. 2569"></textarea>
+          </label>
+        </fieldset>
+
+        <fieldset class="full">
+          <legend>แปลงต้นทาง (Source Plots)</legend>
+          <div class="src-toolbar">
+            <input type="search" id="srcPlotSearch" placeholder="🔍 พิมพ์ชื่อ/FMU/รหัสสมาชิก เพื่อเพิ่มแปลง">
+            <div id="srcPlotSuggest" class="src-suggest"></div>
+          </div>
+
+          <table class="data-table src-table">
+            <thead>
+              <tr>
+                <th>FMU / แปลง</th>
+                <th>เกษตรกร</th>
+                <th>น้ำหนัก (กก.)</th>
+                <th>เลขใบชั่ง / รอบส่ง</th>
+                <th>DRC แห้ง (กก.)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="srcPlotRows"></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2" style="text-align:right"><b>รวม</b></td>
+                <td><b id="srcTotalWeight">0.00</b></td>
+                <td></td>
+                <td><b id="srcTotalDry">0.00</b></td>
+                <td><span class="muted" id="srcPlotCount">0 แปลง</span></td>
+              </tr>
+            </tfoot>
+          </table>
+          <p class="muted" id="srcEmptyMsg">ยังไม่มีแปลงต้นทาง — พิมพ์ชื่อแปลงหรือชื่อเกษตรกรในช่องด้านบนเพื่อเพิ่ม</p>
+        </fieldset>
+
+        <div class="actions-bar full">
+          <button type="submit" class="btn btn-primary">💾 บันทึกล็อต</button>
+          <button type="button" class="btn" id="lotCancelBtn">ยกเลิก</button>
+        </div>
+      </form>
+    </div>
+  </template>
+
+  <template id="tpl-lot-detail">
+    <div class="page">
+      <div class="detail-topbar">
+        <a href="#/lots" class="back-link">← กลับรายการล็อต</a>
+        <div class="actions-bar">
+          <button class="btn" id="lotEditBtn">✏️ แก้ไข</button>
+          <button class="btn btn-secondary" id="lotPrintBtn">🖨️ พิมพ์ใบรับซื้อ</button>
+          <button class="btn btn-secondary" id="lotDeleteBtn">🗑️ ลบล็อต</button>
+        </div>
+      </div>
+
+      <div class="lot-detail-header">
+        <div>
+          <div class="lot-id-big" id="lotDetailId">—</div>
+          <div class="muted" id="lotDetailMeta"></div>
+        </div>
+        <div class="badges">
+          <span class="badge" id="lotDetailFsc"></span>
+          <span class="badge badge-blue" id="lotDetailStatus"></span>
+        </div>
+      </div>
+
+      <div class="dash-grid-12">
+        <section class="panel col-12 panel-quota highlight-panel">
+          <div class="quota-grid" id="lotKpis"></div>
+        </section>
+
+        <section class="panel col-12">
+          <div class="chart-head"><h3>🌱 แปลงต้นทางในล็อตนี้</h3><span class="chart-sub">Source plots — Mass Balance breakdown</span></div>
+          <table class="data-table" id="lotSourceTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>FMU / แปลง</th>
+                <th>เกษตรกร</th>
+                <th>HUB</th>
+                <th>น้ำหนัก (กก.)</th>
+                <th>%</th>
+                <th>DRC แห้ง (กก.)</th>
+                <th>ใบชั่ง</th>
+                <th>FSC</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+
+        <section class="panel col-12">
+          <div class="chart-head"><h3>🛰️ แผนที่แปลงต้นทาง</h3><span class="chart-sub">Source plot map</span></div>
+          <div id="lotMap" class="detail-map"></div>
+        </section>
+
+        <section class="panel col-12">
+          <div class="chart-head"><h3>📋 เอกสารและหมายเหตุ</h3></div>
+          <dl class="kv" id="lotDetailKv"></dl>
+        </section>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-compliance">
+    <div class="page page-compliance">
+      <div class="comp-controls no-print">
+        <a href="#" class="back-link" id="compBackLink">← กลับ</a>
+        <h2 style="margin:6px 0">📑 รายงานตรวจสอบ FSC Compliance (Conversion Date)</h2>
+        <p class="muted">ตรวจสอบหลักฐานพื้นที่ป่าก่อนวันที่ตัดของ FSC (1 พ.ย. 2537) · Principle 6.10</p>
+        <div class="actions-bar">
+          <button class="btn btn-primary" id="compPrintBtn">🖨️ พิมพ์ / บันทึก PDF</button>
+        </div>
+      </div>
+
+      <div class="comp-sheet" id="compSheet">
+        <!-- ── Header ── -->
+        <div class="comp-header">
+          <div class="comp-header-left">
+            <h1>รายงานตรวจสอบ FSC Compliance</h1>
+            <div class="comp-subtitle">FSC Conversion Date Verification · Principle 6.10 · Cut-off 1 November 1994</div>
+            <div class="comp-company">บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด · เลขที่ 288 ต.ปากปวน อ.วังสะพุง จ.เลย 42130</div>
+          </div>
+          <div class="comp-header-right">
+            <div class="comp-stamp" id="compStamp">PENDING</div>
+            <div class="comp-meta">
+              <div>เลขที่รายงาน: <b id="compReportNo"></b></div>
+              <div>วันที่ออก: <b id="compReportDate"></b></div>
+              <div>ออกโดย: <b id="compReportBy"></b></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── 1. Plot Identification ── -->
+        <section class="comp-sec">
+          <h3 class="comp-h">1. ข้อมูลแปลง / Plot Identification</h3>
+          <table class="comp-kv">
+            <tr><th>FMU</th><td id="cFmu"></td><th>รหัสแปลง</th><td id="cPlot"></td></tr>
+            <tr><th>เจ้าของ (เกษตรกร)</th><td id="cOwner"></td><th>รหัสสมาชิก</th><td id="cMemberId"></td></tr>
+            <tr><th>พื้นที่ (ไร่)</th><td id="cArea"></td><th>พิกัด (Lat, Lng)</th><td id="cLatLng"></td></tr>
+            <tr><th colspan="1">ที่ตั้ง</th><td colspan="3" id="cLocation"></td></tr>
+          </table>
+        </section>
+
+        <!-- ── 2. Land Title Evidence ── -->
+        <section class="comp-sec">
+          <h3 class="comp-h">2. หลักฐานเอกสารสิทธิ์ที่ดิน / Land Title Evidence</h3>
+          <table class="comp-kv">
+            <tr><th>ประเภทเอกสาร</th><td id="cDocType"></td><th>เลขที่เอกสาร</th><td id="cDocNo"></td></tr>
+            <tr><th>วันที่ออกเอกสาร</th><td id="cDocDate"></td><th>ก่อน-หลัง 2537</th><td id="cBeforeAfter"></td></tr>
+            <tr><th>สถานะภาษีที่ดิน</th><td id="cTaxStatus"></td><th>เจ้าของเอกสาร</th><td id="cDocOwner"></td></tr>
+            <tr><th>เหตุผลที่ให้ผ่าน FSC</th><td colspan="3" id="cReasonPass" class="comp-reason"></td></tr>
+          </table>
+          <div class="comp-flag" id="cFlagDoc"></div>
+        </section>
+
+        <!-- ── 3. GIS Cross-checks ── -->
+        <section class="comp-sec">
+          <h3 class="comp-h">3. การตรวจสอบเชิงภูมิสารสนเทศ / GIS Cross-checks</h3>
+          <table class="comp-kv">
+            <tr><th>WDPA Protected Area (2026)</th><td id="cWdpaCheck"></td></tr>
+            <tr><th>IFL Intact Forest Landscape (2025)</th><td id="cIflCheck"></td></tr>
+            <tr><th>Polygon ขอบเขตแปลง (KML)</th><td id="cPolyCheck"></td></tr>
+            <tr><th>ขอบเขตเอกสารสิทธิ์ (KML)</th><td id="cLtPolyCheck"></td></tr>
+          </table>
+        </section>
+
+        <!-- ── 5. Supporting Documents ── -->
+        <section class="comp-sec">
+          <h3 class="comp-h">4. เอกสารประกอบ / Supporting Documents</h3>
+          <div class="comp-docs-list" id="cDocsList"></div>
+        </section>
+
+        <!-- ── 6. Satellite Imagery Comparison ── -->
+        <section class="comp-sec comp-maps-sec">
+          <h3 class="comp-h">5. เปรียบเทียบภาพถ่ายดาวเทียม / Satellite Imagery Comparison</h3>
+          <div class="comp-maps">
+            <div class="comp-map-block">
+              <div class="comp-map-title">🕰️ พ.ศ. 2536 (Landsat 5 · 25 ธ.ค. 1993)</div>
+              <div id="cMap1993" class="comp-map"></div>
+              <div class="comp-map-caption">หลักฐานสภาพพื้นที่ <b>ก่อน</b>วันที่ตัดของ FSC (1 พ.ย. 2537)</div>
+            </div>
+            <div class="comp-map-block">
+              <div class="comp-map-title">📅 ภาพปัจจุบัน (Esri World Imagery)</div>
+              <div id="cMapCurrent" class="comp-map"></div>
+              <div class="comp-map-caption">สภาพแปลงปัจจุบัน — สวนยางพาราที่จัดการอยู่</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── 7. Final Assessment ── -->
+        <section class="comp-sec">
+          <h3 class="comp-h">6. สรุปผลการประเมิน / Final Assessment</h3>
+          <div class="comp-score-row">
+            <div class="comp-score-box" id="cFinalBox">
+              <div class="comp-score-icon" id="cFinalIcon">⏳</div>
+              <div class="comp-score-label" id="cFinalLabel">PENDING</div>
+            </div>
+            <div class="comp-score-notes">
+              <ul id="cFinalReasons"></ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── 8. Auditor Sign-off ── -->
+        <section class="comp-sec comp-signoff">
+          <div class="comp-sign-box">
+            <div class="comp-sign-line"></div>
+            <div>ลงชื่อ ผู้ตรวจสอบภายใน (Internal Auditor)</div>
+            <div class="comp-sign-date">วันที่ ______/______/__________</div>
+          </div>
+          <div class="comp-sign-box">
+            <div class="comp-sign-line"></div>
+            <div>ลงชื่อ ผู้รับผิดชอบ FMU (FMU Responsible)</div>
+            <div class="comp-sign-date">วันที่ ______/______/__________</div>
+          </div>
+          <div class="comp-sign-box">
+            <div class="comp-sign-line"></div>
+            <div>ลงชื่อ ผู้จัดการกลุ่ม (Group Manager)</div>
+            <div class="comp-sign-date">วันที่ ______/______/__________</div>
+          </div>
+        </section>
+
+        <div class="comp-footer">
+          รายงานนี้ออกโดยระบบตรวจสอบย้อนกลับยางพารายั่งยืน · บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด · อ้างอิงมาตรฐาน FSC-STD-30-005 V2-1 (Group FM) · FSC-STD-01-001 V4-0 P&C
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-report">
+    <div class="page">
+      <div class="report-controls no-print">
+        <h2>🗺️ แผนที่แปลงปลูกยางพารา</h2>
+        <p class="muted">ตั้งค่าหัวเรื่อง · เลือกชั้นข้อมูล · พิมพ์/บันทึกเป็น PDF</p>
+        <div class="report-form">
+          <label>ขอบเขตของรายงาน
+            <select id="rpScope">
+              <option value="all">รวมทุกแปลง (แผนที่ภาพรวม)</option>
+            </select>
+          </label>
+          <label>🛰️ ภาพถ่ายดาวเทียม
+            <select id="rpBasemapYear">
+              <option value="current">📅 ภาพปัจจุบัน</option>
+              <option value="y2536">🕰️ พ.ศ. 2536 (Landsat 5) — FSC pre-1994</option>
+            </select>
+          </label>
+          <label>หัวเรื่องแผนที่
+            <input type="text" id="rpTitle" value="แผนที่แปลงปลูกยางพารา บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด">
+          </label>
+          <label>บรรทัดที่อยู่ (ดึงอัตโนมัติจาก FMU เมื่อเลือกแปลง)
+            <input type="text" id="rpAddress" value="ตำบลปากปวน อำเภอวังสะพุง จังหวัดเลย">
+          </label>
+          <label>บรรทัดสรุปแปลง
+            <input type="text" id="rpSummary" value="">
+          </label>
+          <label>หมายเหตุเปรียบเทียบ
+            <input type="text" id="rpNote" value="พื้นที่แปลงสมาชิกเปรียบเทียบกับเว็บไซต์ https://www.globalforestwatch.org/ ข้อมูล Intact Forest Landscapes.">
+          </label>
+          <label>ข้อมูลบริษัท (กล่องล่างซ้าย)
+            <textarea id="rpCompany" rows="3">บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด ตั้งอยู่เลขที่ 288 ตำบลปากปวน อำเภอวังสะพุง จังหวัดเลย 42130 เบอร์ติดต่อ 042-039916, 095-2075053</textarea>
+          </label>
+          <div class="layer-toggles-section">
+            <div class="lyr-section-title">ชั้นข้อมูลแผนที่</div>
+            <div class="layer-toggles">
+              <label class="lyr-prod"><input type="checkbox" id="rpLyrProd" checked><span class="lyr-swatch"></span> พื้นที่ผลิต (CPA Map)</label>
+              <label class="lyr-water"><input type="checkbox" id="rpLyrWater" checked><span class="lyr-swatch"></span> แหล่งน้ำ / แม่น้ำ</label>
+              <label class="lyr-lt"><input type="checkbox" id="rpLyrLT" checked><span class="lyr-swatch"></span> เอกสารสิทธิ์</label>
+              <label class="lyr-ifl"><input type="checkbox" id="rpLyrIFL" checked><span class="lyr-swatch"></span> IFL Intact forest landscape <span class="lyr-year">(2025)</span></label>
+              <label class="lyr-wdpa"><input type="checkbox" id="rpLyrWDPA" checked><span class="lyr-swatch"></span> WDPA Thailand <span class="lyr-year">(2026)</span></label>
+            </div>
+          </div>
+          <div class="report-actions">
+            <button class="btn btn-primary" id="rpPrintBtn">🖨️ พิมพ์ / บันทึก PDF</button>
+            <button class="btn" id="rpFitBtn">📍 จัดเฟรมให้พอดี</button>
+            <a class="btn btn-secondary" href="batch-map.html" target="_blank" title="ส่งออก PDF รวมทุก FMU — FMU overview + แปลงย่อยทุกแปลง ทุกชั้นข้อมูล">📥 PDF รวม FMU ทั้งหมด</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ╔═══════════════════ Printable A4 Sheet ═══════════════════╗ -->
+      <div class="hcvf-sheet" id="hcvfSheet">
+        <div class="hcvf-header">
+          <div class="hcvf-title" id="rpTitleOut"></div>
+          <div class="hcvf-subtitle" id="rpAddressOut"></div>
+          <div class="hcvf-subtitle" id="rpSummaryOut"></div>
+          <div class="hcvf-subtitle small" id="rpNoteOut"></div>
+        </div>
+
+        <div class="hcvf-map-wrap">
+          <div id="hcvfMap" class="hcvf-map"></div>
+        </div>
+        <div class="plot-coord-bar" id="plotCoordBar" style="display:none"></div>
+
+        <div class="hcvf-footer">
+          <div class="hcvf-company">
+            <h4>บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด</h4>
+            <p id="rpCompanyOut"></p>
+          </div>
+          <div class="hcvf-legend">
+            <h4>สัญลักษณ์</h4>
+            <div class="lg-grid">
+              <div class="lg-row"><span class="lg-swatch sw-cpa"></span><span>CPA Map (พื้นที่แปลงสมาชิก CPA)</span></div>
+              <div class="lg-row"><span class="lg-text" id="lgArea">พื้นที่ 0 ไร่</span></div>
+              <div class="lg-row"><span class="lg-swatch sw-bnd"></span><span>ขอบเขตอำเภอ / เอกสารสิทธิ์</span></div>
+              <div class="lg-row"><span class="lg-swatch sw-ifl"></span><span>IFL Intact forest landscape TH (2025)</span></div>
+              <div class="lg-row"><span class="lg-swatch sw-wdpa"></span><span>WDPA Thailand (2026)</span></div>
+              <div class="lg-row"><span class="lg-swatch sw-water"></span><span>แหล่งน้ำ แม่น้ำ</span></div>
+            </div>
+          </div>
+          <div class="hcvf-meta">
+            <div class="north-arrow">
+              <div class="north-circle">N<div class="north-needle"></div></div>
+            </div>
+            <div class="scale-info">
+              <div id="scaleText">มาตราส่วน 1:10,000</div>
+              <div class="scale-bar">
+                <span class="seg seg-b"></span><span class="seg seg-w"></span><span class="seg seg-b"></span><span class="seg seg-w"></span>
+              </div>
+              <div class="scale-labels"><span>0</span><span id="scaleL1">100</span><span id="scaleL2">200</span><span id="scaleL3">400 ม.</span></div>
+              <div class="proj">Projection: UTM Zone 47<br>Map Datum: WGS 1984</div>
+              <div class="prep">จัดทำโดยเจ้าหน้าที่<br>บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด<br>ขั้นข้อมูลการปกครอง: กรมพัฒนาที่ดิน<br><b>ปรับปรุงข้อมูล : 1 มกราคม 2569</b></div>
+            </div>
+          </div>
+          <div class="hcvf-inset">
+            <div id="hcvfInset" class="inset-map"></div>
+            <div class="inset-label">ภาพรวมพื้นที่</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Libraries -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+  <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.min.js"></script>
+  <!-- Data (loaded as JS globals so it works on file:// protocol) -->
+  <script src="data/members.js"></script>
+  <script src="data/productive.js"></script>
+  <script src="data/water.js"></script>
+  <script src="data/landtitles.js"></script>
+  <script src="data/tax-mapping.js"></script>
+  <script src="data/lots.js"></script>
+  <script src="data/users.js?v=2026051503"></script>
+  <script src="data/wdpa.js"></script>
+  <script src="data/satellite-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
