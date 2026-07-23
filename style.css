@@ -563,17 +563,17 @@ dl.kv dd {
 }
 .map-toolbar label.lyr-wdpa input[type="checkbox"] { accent-color: #00897b; }
 
-/* 🟪 Buffer zone — dashed purple */
+/* 🟪 Buffer zone — dashed bright magenta */
 .map-toolbar label.lyr-buffer {
-  background: linear-gradient(135deg, rgba(106, 27, 154, 0.10) 0%, rgba(142, 36, 170, 0.18) 100%);
-  border: 2px dashed #6a1b9a;
-  color: #4a148c;
+  background: linear-gradient(135deg, rgba(213, 0, 249, 0.10) 0%, rgba(234, 128, 252, 0.22) 100%);
+  border: 2px dashed #d500f9;
+  color: #8f00b3;
 }
 .map-toolbar label.lyr-buffer:hover {
-  background: linear-gradient(135deg, rgba(106, 27, 154, 0.22) 0%, rgba(142, 36, 170, 0.30) 100%);
-  box-shadow: 0 4px 12px rgba(106, 27, 154, 0.25);
+  background: linear-gradient(135deg, rgba(213, 0, 249, 0.22) 0%, rgba(234, 128, 252, 0.35) 100%);
+  box-shadow: 0 4px 12px rgba(213, 0, 249, 0.30);
 }
-.map-toolbar label.lyr-buffer input[type="checkbox"] { accent-color: #6a1b9a; }
+.map-toolbar label.lyr-buffer input[type="checkbox"] { accent-color: #d500f9; }
 
 .map-toolbar input[type="search"] { min-width: 200px; flex: 1; max-width: 320px; }
 
@@ -2852,7 +2852,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 .layer-toggles label.lyr-prod   .lyr-swatch { background: #2e7d32; }
 .layer-toggles label.lyr-water  .lyr-swatch { background: #29b6f6; }
 .layer-toggles label.lyr-lt     .lyr-swatch { background: #ffd600; border-style: dashed; border-color: #f9a825; }
-.layer-toggles label.lyr-buffer .lyr-swatch { background: transparent; border-style: dashed; border-color: #6a1b9a; }
+.layer-toggles label.lyr-buffer .lyr-swatch { background: transparent; border-style: dashed; border-color: #d500f9; }
 .layer-toggles label.lyr-ifl    .lyr-swatch { background: #a5d6a7; border-color: #1b5e20; }
 .layer-toggles label.lyr-wdpa   .lyr-swatch { background: #80cbc4; border-color: #00695c; }
 
@@ -2864,7 +2864,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 .layer-toggles label.lyr-prod:has(input:checked)   { background: rgba(46, 125, 50, 0.08); border-color: #2e7d32; color: #1b5e20; }
 .layer-toggles label.lyr-water:has(input:checked)  { background: rgba(41, 182, 246, 0.12); border-color: #0288d1; color: #01579b; }
 .layer-toggles label.lyr-lt:has(input:checked)     { background: rgba(255, 214, 0, 0.14); border-color: #f9a825; color: #795500; }
-.layer-toggles label.lyr-buffer:has(input:checked) { background: rgba(106, 27, 154, 0.10); border-color: #6a1b9a; color: #4a148c; }
+.layer-toggles label.lyr-buffer:has(input:checked) { background: rgba(213, 0, 249, 0.10); border-color: #d500f9; color: #8f00b3; }
 .layer-toggles label.lyr-ifl:has(input:checked)    { background: rgba(165, 214, 167, 0.3); border-color: #1b5e20; color: #1b5e20; }
 .layer-toggles label.lyr-wdpa:has(input:checked)   { background: rgba(128, 203, 196, 0.25); border-color: #00695c; color: #004d40; }
 
@@ -3035,7 +3035,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 .lg-swatch { width: 9mm; height: 4mm; border: 1px solid #000; flex-shrink: 0; }
 .sw-cpa { background: #00c853; border: 1.5px solid #00c853; }
 .sw-bnd { background: white; border: 1.5px solid #ffd600; }
-.sw-buffer { background: white; border: 1.5px dashed #6a1b9a; }
+.sw-buffer { background: white; border: 1.5px dashed #d500f9; }
 .sw-ifl { background: #fff9c4; }
 .sw-wdpa { background: #80deea; }
 .sw-water { background: #4fc3f7; }

@@ -1980,12 +1980,12 @@ function renderMap() {
   // Buffer zone: purple dashed boundary lines (จาก Buffer zone.kml)
   BUFFERZONES.forEach(f => {
     const line = L.polyline(f.coordinates.map(c => [c[1], c[0]]), {
-      color: "#6a1b9a",
+      color: "#d500f9",
       weight: 3,
       dashArray: "6,4",
       smoothFactor: 1,
     });
-    line.bindPopup(`<div class="map-popup"><div class="pop-tag" style="background:#6a1b9a;color:white">🟪 Buffer Zone</div><h4>${f.name}</h4></div>`);
+    line.bindPopup(`<div class="map-popup"><div class="pop-tag" style="background:#d500f9;color:white">🟪 Buffer Zone</div><h4>${f.name}</h4></div>`);
     line.bindTooltip(f.name, { className: "tip-buffer", direction: "top" });
     line._name = f.name;
     line.on("mouseover", e => e.target.setStyle({ weight: 5 }));
@@ -4222,7 +4222,7 @@ function renderReport(params) {
   });
   BUFFERZONES.forEach(f => {
     L.polyline(f.coordinates.map(c => [c[1], c[0]]), {
-      color: "#6a1b9a", weight: 2.5, dashArray: "6,4",
+      color: "#d500f9", weight: 2.5, dashArray: "6,4",
     }).bindTooltip(f.name).addTo(lyrBuffer);
   });
 
