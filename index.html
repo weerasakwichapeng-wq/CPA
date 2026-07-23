@@ -318,6 +318,7 @@
         <label class="lyr-prod"><input type="checkbox" id="togProductive" checked> 🟩 พื้นที่ให้ผลผลิต (<span id="cntProd"></span>)</label>
         <label class="lyr-water"><input type="checkbox" id="togWater" checked> 🔵 แหล่งน้ำ (<span id="cntWater"></span>)</label>
         <label class="lyr-lt"><input type="checkbox" id="togLandTitle" checked> 🟨 เอกสารสิทธิ์ (<span id="cntLT"></span>)</label>
+        <label class="lyr-buffer"><input type="checkbox" id="togBuffer" checked> 🟪 Buffer Zone (<span id="cntBuffer"></span>)</label>
         <label class="lyr-ifl"><input type="checkbox" id="togIFL"> 🟢 IFL Intact Forest <span class="lyr-year">(2025)</span></label>
         <label class="lyr-wdpa"><input type="checkbox" id="togWDPA"> 🟦 WDPA Protected <span class="lyr-year">(2026)</span></label>
         <input type="search" id="mapSearch" placeholder="🔍 ค้นหา FMU หรือชื่อ...">
@@ -965,6 +966,7 @@
               <label class="lyr-prod"><input type="checkbox" id="rpLyrProd" checked><span class="lyr-swatch"></span> พื้นที่ผลิต (CPA Map)</label>
               <label class="lyr-water"><input type="checkbox" id="rpLyrWater" checked><span class="lyr-swatch"></span> แหล่งน้ำ / แม่น้ำ</label>
               <label class="lyr-lt"><input type="checkbox" id="rpLyrLT" checked><span class="lyr-swatch"></span> เอกสารสิทธิ์</label>
+              <label class="lyr-buffer"><input type="checkbox" id="rpLyrBuffer" checked><span class="lyr-swatch"></span> Buffer Zone</label>
               <label class="lyr-ifl"><input type="checkbox" id="rpLyrIFL" checked><span class="lyr-swatch"></span> IFL Intact forest landscape <span class="lyr-year">(2025)</span></label>
               <label class="lyr-wdpa"><input type="checkbox" id="rpLyrWDPA" checked><span class="lyr-swatch"></span> WDPA Thailand <span class="lyr-year">(2026)</span></label>
             </div>
@@ -1002,6 +1004,7 @@
               <div class="lg-row"><span class="lg-swatch sw-cpa"></span><span>CPA Map (พื้นที่แปลงสมาชิก CPA)</span></div>
               <div class="lg-row"><span class="lg-text" id="lgArea">พื้นที่ 0 ไร่</span></div>
               <div class="lg-row"><span class="lg-swatch sw-bnd"></span><span>ขอบเขตอำเภอ / เอกสารสิทธิ์</span></div>
+              <div class="lg-row"><span class="lg-swatch sw-buffer"></span><span>Buffer Zone</span></div>
               <div class="lg-row"><span class="lg-swatch sw-ifl"></span><span>IFL Intact forest landscape TH (2025)</span></div>
               <div class="lg-row"><span class="lg-swatch sw-wdpa"></span><span>WDPA Thailand (2026)</span></div>
               <div class="lg-row"><span class="lg-swatch sw-water"></span><span>แหล่งน้ำ แม่น้ำ</span></div>
@@ -1043,6 +1046,7 @@
   <script src="data/lots.js"></script>
   <script src="data/users.js?v=2026051503"></script>
   <script src="data/wdpa.js"></script>
+  <script src="data/bufferzone.js"></script>
   <script src="data/satellite-config.js"></script>
   <script src="app.js"></script>
 </body>

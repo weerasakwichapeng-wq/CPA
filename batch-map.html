@@ -176,6 +176,7 @@
 <script src="data/water.js"></script>
 <script src="data/landtitles.js"></script>
 <script src="data/wdpa.js"></script>
+<script src="data/bufferzone.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
@@ -251,6 +252,7 @@
   const LANDTITLES = window.LAND_TITLES      || [];
   const WDPA_DATA  = window.WDPA_AREAS       || [];
   const IFL_DATA   = window.IFL_THAILAND     || null;
+  const BUFFERZONES = window.BUFFER_ZONES    || [];
 
   let customRecs = [];
   try { customRecs = JSON.parse(localStorage.getItem("fsc_custom_records") || "[]"); } catch(e){}
@@ -321,6 +323,11 @@
   );
   WDPA_POLYS.forEach(ring =>
     L.polygon(ring, { color: "#00695c", weight: 1.5, fillColor: "#80cbc4", fillOpacity: 0.5, interactive: false }).addTo(map)
+  );
+  BUFFERZONES.forEach(f =>
+    L.polyline(f.coordinates.map(c => [c[1], c[0]]), {
+      color: "#6a1b9a", weight: 2, dashArray: "6,4", interactive: false,
+    }).addTo(map)
   );
 
   /* ── Inset (ONE instance, reused) ── */

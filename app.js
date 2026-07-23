@@ -4,6 +4,7 @@ const MEMBERS = window.MEMBERS || [];
 let PRODUCTIVE = window.PRODUCTIVE_AREAS || [];
 let WATER = window.WATER_AREAS || [];
 let LANDTITLES = window.LAND_TITLES || [];
+let BUFFERZONES = window.BUFFER_ZONES || [];
 
 /* Classify polygon by styleUrl color code embedded in the style name.
    Productive area KML uses: 7CB342 = green (productive),
@@ -1895,6 +1896,7 @@ function renderMap() {
   $("#cntProd").textContent = PRODUCTIVE.length;
   $("#cntWater").textContent = WATER.length;
   $("#cntLT").textContent = LANDTITLES.length;
+  $("#cntBuffer").textContent = BUFFERZONES.length;
   const map = L.map("bigMap").setView([17.4, 101.5], 12);
 
   // ── Satellite basemap (สลับปีได้ ผ่าน dropdown ใน toolbar) ──
@@ -1923,6 +1925,7 @@ function renderMap() {
   const prodLayer = L.layerGroup();
   const waterLayer = L.layerGroup();
   const ltLayer = L.layerGroup();
+  const bufferLayer = L.layerGroup();
 
   // Water bodies: bright cyan/blue fill, solid border
   WATER.forEach(p => {
@@ -1972,6 +1975,22 @@ function renderMap() {
     poly.on("mouseover", e => e.target.setStyle({ weight: 5 }));
     poly.on("mouseout", e => e.target.setStyle({ weight: 3 }));
     ltLayer.addLayer(poly);
+  });
+
+  // Buffer zone: purple dashed boundary lines (จาก Buffer zone.kml)
+  BUFFERZONES.forEach(f => {
+    const line = L.polyline(f.coordinates.map(c => [c[1], c[0]]), {
+      color: "#6a1b9a",
+      weight: 3,
+      dashArray: "6,4",
+      smoothFactor: 1,
+    });
+    line.bindPopup(`<div class="map-popup"><div class="pop-tag" style="background:#6a1b9a;color:white">🟪 Buffer Zone</div><h4>${f.name}</h4></div>`);
+    line.bindTooltip(f.name, { className: "tip-buffer", direction: "top" });
+    line._name = f.name;
+    line.on("mouseover", e => e.target.setStyle({ weight: 5 }));
+    line.on("mouseout", e => e.target.setStyle({ weight: 3 }));
+    bufferLayer.addLayer(line);
   });
 
   // ── IFL + WDPA fetched from OpenStreetMap via Overpass API (reliable, no auth) ──
@@ -2246,35 +2265,45 @@ function renderMap() {
     }
   }
 
-  // Add layers in z-order: WDPA/IFL (bottom), productive, water, LT outline (top)
+  // Add layers in z-order: WDPA/IFL (bottom), productive, water, LT outline, buffer zone (top)
   prodLayer.addTo(map);
   waterLayer.addTo(map);
   ltLayer.addTo(map);
+  bufferLayer.addTo(map);
+
+  // Buffer zone must always render above every other layer — re-assert
+  // its z-order whenever another layer is (re)added to the map.
+  function bringBufferToFront() { bufferLayer.eachLayer(l => l.bringToFront && l.bringToFront()); }
 
   $("#togProductive").addEventListener("change", e => {
-    if (e.target.checked) map.addLayer(prodLayer); else map.removeLayer(prodLayer);
+    if (e.target.checked) { map.addLayer(prodLayer); bringBufferToFront(); } else map.removeLayer(prodLayer);
   });
   $("#togWater").addEventListener("change", e => {
-    if (e.target.checked) map.addLayer(waterLayer); else map.removeLayer(waterLayer);
+    if (e.target.checked) { map.addLayer(waterLayer); bringBufferToFront(); } else map.removeLayer(waterLayer);
   });
   $("#togLandTitle").addEventListener("change", e => {
-    if (e.target.checked) map.addLayer(ltLayer); else map.removeLayer(ltLayer);
+    if (e.target.checked) { map.addLayer(ltLayer); bringBufferToFront(); } else map.removeLayer(ltLayer);
+  });
+  $("#togBuffer").addEventListener("change", e => {
+    if (e.target.checked) { map.addLayer(bufferLayer); bringBufferToFront(); } else map.removeLayer(bufferLayer);
   });
   $("#togIFL").addEventListener("change", async e => {
     if (e.target.checked) {
       await loadIFL();
       iflLayer.addTo(map);
+      bringBufferToFront();
     } else map.removeLayer(iflLayer);
   });
   $("#togWDPA").addEventListener("change", async e => {
     if (e.target.checked) {
       await loadWDPA();
       wdpaLayer.addTo(map);
+      bringBufferToFront();
     } else map.removeLayer(wdpaLayer);
   });
 
   // Fit all
-  const allPolys = [...prodLayer.getLayers(), ...waterLayer.getLayers(), ...ltLayer.getLayers()];
+  const allPolys = [...prodLayer.getLayers(), ...waterLayer.getLayers(), ...ltLayer.getLayers(), ...bufferLayer.getLayers()];
   if (allPolys.length) map.fitBounds(L.featureGroup(allPolys).getBounds());
 
   $("#fitAllBtn").onclick = () => map.fitBounds(L.featureGroup(allPolys).getBounds());
@@ -4153,7 +4182,7 @@ function renderReport(params) {
     console.log("[WDPA Report] loaded", total, "polygons");
   }
 
-  const lyrProd = L.layerGroup(), lyrWater = L.layerGroup(), lyrLT = L.layerGroup(), lyrFocus = L.layerGroup();
+  const lyrProd = L.layerGroup(), lyrWater = L.layerGroup(), lyrLT = L.layerGroup(), lyrBuffer = L.layerGroup(), lyrFocus = L.layerGroup();
 
   // Render ALL productive + water + land titles (like main map) for context
   // FMU mode: highlight FMU polygons, dim others.  Single-plot mode: existing crosshair behavior.
@@ -4191,8 +4220,14 @@ function renderReport(params) {
       opacity: isFocused ? 1 : (focusFmuNum !== null ? 0.3 : 0.7),
     }).bindTooltip(p.name).addTo(lyrLT);
   });
+  BUFFERZONES.forEach(f => {
+    L.polyline(f.coordinates.map(c => [c[1], c[0]]), {
+      color: "#6a1b9a", weight: 2.5, dashArray: "6,4",
+    }).bindTooltip(f.name).addTo(lyrBuffer);
+  });
 
-  lyrProd.addTo(map); lyrWater.addTo(map); lyrLT.addTo(map); lyrFocus.addTo(map);
+  // Buffer zone added last so it always renders on top of every other layer
+  lyrProd.addTo(map); lyrWater.addTo(map); lyrLT.addTo(map); lyrFocus.addTo(map); lyrBuffer.addTo(map);
 
   // Inset overview — always shows ALL productive areas for context
   const inset = L.map("hcvfInset", { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, renderer: L.svg({ padding: 2.0 }) }).setView([17.4, 101.5], 8);
@@ -4292,7 +4327,7 @@ function renderReport(params) {
   }
 
   // Fit main map at appropriate scale centered on the SELECTED scope
-  const allLayers = [...lyrProd.getLayers(), ...lyrWater.getLayers(), ...lyrLT.getLayers(), ...lyrFocus.getLayers()];
+  const allLayers = [...lyrProd.getLayers(), ...lyrWater.getLayers(), ...lyrLT.getLayers(), ...lyrBuffer.getLayers(), ...lyrFocus.getLayers()];
   function fitMain() {
     if (!allLayers.length) return;
     let center, zoom;
@@ -4344,27 +4379,32 @@ function renderReport(params) {
   map.on("zoomend", updateScaleDisplay);
   if (insetPolys.length) inset.fitBounds(L.featureGroup(insetPolys).getBounds().pad(0.5));
 
+  // Buffer zone must always render above every other layer — re-assert
+  // its z-order whenever another layer is (re)added to the map.
+  function bringBufferToFront() { lyrBuffer.eachLayer(l => l.bringToFront && l.bringToFront()); }
+
   function bindToggle(id, layer, useTiles) {
     const el = $("#" + id);
     if (!el) return;
     el.addEventListener("change", e => {
-      if (e.target.checked) map.addLayer(layer); else map.removeLayer(layer);
+      if (e.target.checked) { map.addLayer(layer); bringBufferToFront(); } else map.removeLayer(layer);
     });
   }
   // Productive toggle controls both regular + focused-highlight layers
   const togProd = $("#rpLyrProd");
   if (togProd) {
     togProd.addEventListener("change", e => {
-      if (e.target.checked) { map.addLayer(lyrProd); map.addLayer(lyrFocus); }
+      if (e.target.checked) { map.addLayer(lyrProd); map.addLayer(lyrFocus); bringBufferToFront(); }
       else { map.removeLayer(lyrProd); map.removeLayer(lyrFocus); }
     });
   }
   bindToggle("rpLyrWater", lyrWater);
   bindToggle("rpLyrLT", lyrLT);
+  bindToggle("rpLyrBuffer", lyrBuffer);
   const togIFLRpt = $("#rpLyrIFL");
   if (togIFLRpt) {
     togIFLRpt.addEventListener("change", async e => {
-      if (e.target.checked) { await buildIFLReport(); iflLayer.addTo(map); }
+      if (e.target.checked) { await buildIFLReport(); iflLayer.addTo(map); bringBufferToFront(); }
       else map.removeLayer(iflLayer);
     });
   }
@@ -4375,6 +4415,7 @@ function renderReport(params) {
       if (e.target.checked) {
         await loadWDPAReport();
         map.addLayer(wdpaLayer);
+        bringBufferToFront();
       } else {
         map.removeLayer(wdpaLayer);
       }
@@ -4385,11 +4426,12 @@ function renderReport(params) {
 
   // Auto-load IFL + WDPA เมื่อ checkbox ถูก checked by default
   if (togIFLRpt && togIFLRpt.checked) {
-    buildIFLReport().then(() => iflLayer.addTo(map));
+    buildIFLReport().then(() => { iflLayer.addTo(map); bringBufferToFront(); });
   }
   if (togWDPA && togWDPA.checked) {
     loadWDPAReport();
     map.addLayer(wdpaLayer);
+    bringBufferToFront();
   }
 
   // Resize map ก่อนพิมพ์ — beforeprint/afterprint จะ trigger หลัง CSS @media print apply แล้ว
