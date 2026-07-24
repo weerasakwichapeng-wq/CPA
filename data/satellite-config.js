@@ -31,6 +31,10 @@ window.SATELLITE_BASEMAPS = {
     tileUrl: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     attribution: "© Esri World Imagery",
     maxZoom: 19,
+    // เลย/พื้นที่ชนบทหลายจุดไม่มีภาพ res สูงเกิน z18 — เกินนี้ Esri จะส่ง
+    // tile placeholder "Map data not yet available" กลับมาแทน ภาพจริง
+    // ตั้ง maxNativeZoom ไว้ที่ 18 ให้ Leaflet ขยาย tile ล่าสุดแทนการขอ tile ที่ไม่มีจริง
+    maxNativeZoom: 18,
     note: null,
   },
   y2536: {

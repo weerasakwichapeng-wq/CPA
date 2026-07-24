@@ -161,7 +161,7 @@ function getBasemapConfig(key) {
   const all = window.SATELLITE_BASEMAPS || {};
   return all[key] || all[window.DEFAULT_BASEMAP_KEY] || all.current || {
     tileUrl: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "© Esri", maxZoom: 19,
+    attribution: "© Esri", maxZoom: 19, maxNativeZoom: 18,
   };
 }
 function getSelectedBasemapKey() {
@@ -1150,7 +1150,7 @@ function renderFarmerDetail(params) {
   // Detail map
   const map = L.map("detailMap").setView([17.4, 101.5], 13);
   L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-    attribution: "Tiles © Esri", maxZoom: 19,
+    attribution: "Tiles © Esri", maxZoom: 19, maxNativeZoom: 18,
   }).addTo(map);
   L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
     maxZoom: 19, opacity: 0.8,
@@ -2765,7 +2765,7 @@ function renderTrace() {
         if (!mapInstance) {
           mapInstance = L.map(mapId, { zoomControl: true }).setView([m.lat || 17.4, m.lng || 101.5], 14);
           L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-            attribution: "© Esri", maxZoom: 19,
+            attribution: "© Esri", maxZoom: 19, maxNativeZoom: 18,
           }).addTo(mapInstance);
           L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
             maxZoom: 19, opacity: 0.8,
@@ -3545,7 +3545,7 @@ function renderLotDetail(params) {
   // Map — show all source polygons
   const map = L.map("lotMap").setView([17.4, 101.5], 12);
   L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-    attribution: "© Esri", maxZoom: 19,
+    attribution: "© Esri", maxZoom: 19, maxNativeZoom: 18,
   }).addTo(map);
   L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
     maxZoom: 19, opacity: 0.8,
@@ -4231,7 +4231,7 @@ function renderReport(params) {
 
   // Inset overview — always shows ALL productive areas for context
   const inset = L.map("hcvfInset", { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, renderer: L.svg({ padding: 2.0 }) }).setView([17.4, 101.5], 8);
-  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 }).addTo(inset);
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, maxNativeZoom: 18 }).addTo(inset);
   const insetPolys = [];
   PRODUCTIVE.forEach(p => {
     const poly = L.polygon(p.coordinates.map(c => [c[1], c[0]]), { color: "#1b5e20", weight: 1, fillColor: "#2e7d32", fillOpacity: 0.9 });

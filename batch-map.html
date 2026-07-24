@@ -300,7 +300,10 @@
     renderer: L.canvas({ padding: 0.5 }),   /* ← canvas renderer */
   }).setView([17.4, 101.5], 11);
 
-  const tileBase = L.tileLayer(TILE_URL,   { maxZoom: 19, crossOrigin: "anonymous" }).addTo(map);
+  /* maxNativeZoom: 18 — พื้นที่ชนบทหลายจุดไม่มีภาพ res สูงกว่า z18 บน Esri
+     เกินนี้จะได้ tile "Map data not yet available" แทนภาพจริง จึงล็อกไว้ให้ Leaflet
+     ขยาย tile z18 แทนการขอ tile ที่ไม่มีจริงตอน fitBounds ไปที่แปลงเล็ก ๆ */
+  const tileBase = L.tileLayer(TILE_URL,   { maxZoom: 19, maxNativeZoom: 18, crossOrigin: "anonymous" }).addTo(map);
                    L.tileLayer(LABELS_URL, { maxZoom: 19, opacity: 0.75, crossOrigin: "anonymous" }).addTo(map);
 
   /* Add polygon layers ครั้งเดียว — restyle ทีละ scope */
@@ -337,7 +340,7 @@
     dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
     renderer: L.canvas({ padding: 0.5 }),
   }).setView([17.4, 101.5], 8);
-  L.tileLayer(TILE_URL, { maxZoom: 19, crossOrigin: "anonymous" }).addTo(inset);
+  L.tileLayer(TILE_URL, { maxZoom: 19, maxNativeZoom: 18, crossOrigin: "anonymous" }).addTo(inset);
   const insetLyrs = PRODUCTIVE.map(p =>
     L.polygon(p.coordinates.map(c => [c[1], c[0]]), {
       color: "#1b5e20", weight: 1, fillColor: "#2e7d32", fillOpacity: 0.9, interactive: false,
