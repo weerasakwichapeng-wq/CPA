@@ -3139,60 +3139,92 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 }
 
-/* ─── ใบรับซื้อ (Lot detail) — เอกสารพิมพ์แยกจาก dashboard บนจอ ───
+/* ─── ใบสรุปการซื้อ (Lot detail) — เอกสารพิมพ์แยกจาก dashboard บนจอ ───
    dashboard บนจอมีแผนที่ Leaflet + ตาราง rowspan หลายคอลัมน์ ซึ่งพิมพ์ไม่น่าเชื่อถือ
-   (เนื้อหาขาดหาย/ตัดหน้าแปลกๆ) จึงสร้างเอกสารเฉพาะสำหรับพิมพ์ (#lotPrintSheet) แทน */
+   (เนื้อหาขาดหาย/ตัดหน้าแปลกๆ) จึงสร้างเอกสารเฉพาะสำหรับพิมพ์ (#lotPrintSheet) แทน
+   ดีไซน์แบบเอกสารธุรกิจทางการ: หัวเอกสาร 2 คอลัมน์ + กล่องข้อมูลเอกสาร + หัวข้อมีเลขกำกับ */
 .lot-print-sheet { display: none; }
 @media print {
-  @page { size: A4 portrait; margin: 12mm; }
+  @page { size: A4 portrait; margin: 14mm 12mm; }
   .page-lot-detail { max-width: none !important; }
   .page-lot-detail .dash-grid-12,
   .page-lot-detail .lot-detail-header { display: none !important; }
   .page-lot-detail .lot-print-sheet {
     display: block !important;
     font-family: "Prompt", sans-serif;
-    color: #111;
+    color: #1a1a1a;
   }
 
-  .lps-header { text-align: center; margin-bottom: 5mm; border-bottom: 2px solid #1b5e20; padding-bottom: 3mm; }
-  .lps-company { font-size: 11pt; font-weight: 600; color: #1b5e20; }
-  .lps-title { font-size: 16pt; font-weight: 700; margin: 1mm 0; }
-  .lps-meta { font-size: 9pt; color: #444; }
+  /* หัวเอกสาร — บริษัท (ซ้าย) / ชื่อเอกสาร (ขวา) คั่นด้วยเส้นคู่แบบเอกสารทางการ */
+  .lps-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 2.5px solid #1b5e20; padding-bottom: 3mm; margin-bottom: 1mm;
+  }
+  .lps-company { font-size: 13pt; font-weight: 700; color: #1b5e20; letter-spacing: 0.2px; }
+  .lps-company-sub { font-size: 8.5pt; color: #666; margin-top: 0.5mm; }
+  .lps-header-right { text-align: right; }
+  .lps-title { font-size: 18pt; font-weight: 700; color: #1a1a1a; }
+  .lps-title-en { font-size: 8.5pt; color: #888; letter-spacing: 1.5px; text-transform: uppercase; }
+  .lps-header + .lps-docinfo { border-top: none; }
+
+  /* กล่องข้อมูลเอกสาร — เลขที่/วันที่/HUB ฯลฯ จัดเป็นตารางทางการ อ่านง่ายกว่าข้อความรวมบรรทัดเดียว */
+  .lps-docinfo {
+    width: 100%; border-collapse: collapse; margin-bottom: 5mm;
+    border: 1px solid #cfd8cf; background: #fafcfa;
+  }
+  .lps-docinfo td { padding: 2mm 4mm; border: 1px solid #e0e6e0; font-size: 9pt; width: 33.33%; }
+  .lps-docinfo-k { font-size: 7.5pt; color: #666; text-transform: uppercase; letter-spacing: 0.3px; }
 
   .lps-section { margin-bottom: 5mm; page-break-inside: avoid; }
   .lps-sec-title {
-    font-size: 10.5pt; font-weight: 700; color: white; background: #2e7d32;
-    padding: 1.5mm 3mm; border-radius: 3px; margin-bottom: 2mm;
+    display: flex; align-items: center; gap: 2.5mm;
+    font-size: 11pt; font-weight: 700; color: #1b5e20;
+    border-bottom: 1.2px solid #1b5e20; padding-bottom: 1.5mm; margin-bottom: 2.5mm;
+  }
+  .lps-sec-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 5.5mm; height: 5.5mm; border-radius: 50%;
+    background: #1b5e20; color: white; font-size: 8.5pt; font-weight: 700;
+    flex-shrink: 0;
   }
 
-  .lps-kv-table { border-collapse: collapse; width: 100%; font-size: 9pt; }
-  .lps-kv-table td { padding: 1mm 2mm; border: 1px solid #ddd; }
-  .lps-kv-table td.lps-k { font-weight: 600; background: #f5f5f5; width: 35mm; }
+  .lps-kv-table { border-collapse: collapse; width: 100%; font-size: 9pt; margin-bottom: 2mm; }
+  .lps-kv-table td { padding: 1.2mm 2.5mm; border: 1px solid #e0e0e0; }
+  .lps-kv-table td.lps-k { font-weight: 600; background: #f5f7f5; width: 38mm; color: #333; }
 
   .lps-table { width: 100%; border-collapse: collapse; font-size: 8pt; page-break-inside: auto; }
-  .lps-table th, .lps-table td { border: 1px solid #999; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
-  .lps-table th { background: #e8f5e9; font-weight: 700; text-align: center; }
+  .lps-table th, .lps-table td { border: 1px solid #cfcfcf; padding: 1.8mm 2.2mm; text-align: left; vertical-align: top; }
+  .lps-table th { background: #1b5e20; color: white; font-weight: 700; text-align: center; }
   .lps-table td:nth-child(n+3) { text-align: right; }
+  .lps-table tbody tr:nth-child(even) { background: #f7faf7; }
   .lps-table tr { page-break-inside: avoid; }
-  .lps-table .lps-total-row { font-weight: 700; background: #f1f8e9; }
+  .lps-table .lps-total-row { font-weight: 700; background: #e8f5e9 !important; border-top: 1.5px solid #1b5e20; }
   .lps-table .lps-total-row td:nth-child(n+3) { text-align: right; }
   .lps-quota-bad { color: #b71c1c; font-weight: 700; }
-  .lps-over-quota { background: #ffebee; }
+  .lps-over-quota { background: #ffebee !important; }
 
   .lps-photo-row { display: flex; flex-wrap: wrap; gap: 4mm; }
   .lps-photo-row .lot-photo-thumb-link { width: 50mm; }
-  .lps-photo-row .lot-photo-thumb-img { width: 50mm; height: 38mm; }
+  .lps-photo-row .lot-photo-thumb-img { width: 50mm; height: 38mm; border: 1px solid #ccc; }
   .lps-photo-row .lot-photo-thumb-cap { font-size: 7pt; }
 
   /* รูปถ่ายตาชั่ง/ยาง ในตารางแปลงต้นทาง — เล็กกว่าแถวรูปเดี่ยวเพราะอยู่ในเซลล์ตาราง แต่ใหญ่ขึ้นจากเดิม */
   .lps-photo-cell { display: flex; flex-direction: column; gap: 1.5mm; }
   .lps-photo-cell .lot-photo-thumb-link { width: 26mm; }
-  .lps-photo-cell .lot-photo-thumb-img { width: 26mm; height: 20mm; }
+  .lps-photo-cell .lot-photo-thumb-img { width: 26mm; height: 20mm; border: 1px solid #ccc; }
   .lps-photo-cell .lot-photo-thumb-cap { font-size: 6pt; }
 
-  .lps-signoff { display: flex; justify-content: space-between; margin-top: 12mm; page-break-inside: avoid; }
+  .lps-signoff { display: flex; justify-content: space-between; margin-top: 14mm; page-break-inside: avoid; }
   .lps-sign-box { width: 30%; text-align: center; font-size: 9pt; }
-  .lps-sign-line { border-bottom: 1px solid #333; height: 12mm; margin-bottom: 2mm; }
+  .lps-sign-line { border-bottom: 1px solid #333; height: 14mm; margin-bottom: 2mm; }
+  .lps-sign-role { font-weight: 700; }
+  .lps-sign-sub { font-size: 8pt; color: #666; margin: 0.5mm 0 2mm; }
+  .lps-sign-date { font-size: 8pt; color: #666; }
+
+  .lps-footer {
+    margin-top: 8mm; padding-top: 2mm; border-top: 1px solid #ddd;
+    font-size: 7pt; color: #999; text-align: center;
+  }
 }
 
 /* Scrollbar */

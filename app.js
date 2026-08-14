@@ -4228,11 +4228,18 @@ function renderLotDetail(params) {
   }
   renderClosurePanel();
 
-  // ── เอกสาร "ใบรับซื้อ" สำหรับพิมพ์ — สร้างแยกจาก dashboard บนจอ เพราะแผนที่/ตารางแบบ
+  // ── เอกสาร "ใบสรุปการซื้อ" สำหรับพิมพ์ — สร้างแยกจาก dashboard บนจอ เพราะแผนที่/ตารางแบบ
   //    rowspan/กริดหลายคอลัมน์ พิมพ์ไม่น่าเชื่อถือ (เนื้อหาขาดหาย ตัดหน้าแปลกๆ) ──
   function renderPrintSheet() {
     $("#lpsCompany").textContent = lot.buyer || "บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด";
-    $("#lpsMeta").innerHTML = `เลขที่ล็อต <b>${safe(lot.lotId)}</b> &nbsp;·&nbsp; วันที่รับซื้อ ${safe(lot.purchaseDate)} &nbsp;·&nbsp; HUB ${safe(lot.hub)} &nbsp;·&nbsp; ${safe(lot.productForm)} &nbsp;·&nbsp; ${safe(lot.fscClaim)}`;
+
+    const metaTb = $("#lpsMeta");
+    metaTb.innerHTML = "";
+    const metaRow = (label, value) => el("td", null, el("span", { class: "lps-docinfo-k" }, label), el("br"), el("b", null, safe(value)));
+    metaTb.append(
+      el("tr", null, metaRow("เลขที่เอกสาร", lot.lotId), metaRow("วันที่รับซื้อ", lot.purchaseDate), metaRow("จุดรับซื้อ (HUB)", lot.hub)),
+      el("tr", null, metaRow("รูปแบบผลิต", lot.productForm), metaRow("FSC Claim", lot.fscClaim), metaRow("เลขใบส่งของ", lot.transferDocNo)),
+    );
 
     // 1. ตรวจเช็ครถขนส่ง
     const truck = lot.truck || {};
@@ -4330,6 +4337,10 @@ function renderLotDetail(params) {
     } else {
       notesSection.style.display = "none";
     }
+
+    // ท้ายเอกสาร — วันเวลาที่พิมพ์ + ผู้พิมพ์ (สำหรับตรวจสอบย้อนกลับว่าพิมพ์เมื่อใด/โดยใคร)
+    const me = getCurrentUser();
+    $("#lpsFooter").textContent = `พิมพ์เมื่อ ${new Date().toLocaleString("th-TH", { dateStyle: "long", timeStyle: "short" })} · โดย ${me.displayName || me.username || "-"} · เอกสารนี้สร้างจากระบบตรวจสอบย้อนกลับยางพารา FSC`;
   }
   renderPrintSheet();
 
