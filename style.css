@@ -3218,11 +3218,20 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-photo-row .lot-photo-thumb-img { width: 50mm; height: 38mm; border: 1px solid #ccc; }
   .lps-photo-row .lot-photo-thumb-cap { font-size: 7pt; }
 
-  /* รูปถ่ายตาชั่ง/ยาง ในตารางแปลงต้นทาง — เล็กกว่าแถวรูปเดี่ยวเพราะอยู่ในเซลล์ตาราง แต่ใหญ่ขึ้นจากเดิม */
-  .lps-photo-cell { display: flex; flex-direction: column; gap: 1.5mm; }
-  .lps-photo-cell .lot-photo-thumb-link { width: 26mm; }
-  .lps-photo-cell .lot-photo-thumb-img { width: 26mm; height: 20mm; border: 1px solid #ccc; }
-  .lps-photo-cell .lot-photo-thumb-cap { font-size: 6pt; }
+  /* ตารางรูป 3 คอลัมน์เต็มความกว้างหน้ากระดาษ — ใช้ทั้งรูปตรวจรถและรูปหน้างานชั่งน้ำหนัก */
+  .lps-photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+  .lps-photo-grid .lot-photo-thumb-link { width: 100%; }
+  .lps-photo-grid .lot-photo-thumb-img { width: 100%; border: 1px solid #ccc; object-fit: cover; }
+  .lps-photo-grid .lot-photo-thumb-cap { font-size: 7.5pt; }
+
+  /* รูปตรวจรถ (หน้ารถ/ข้างรถ/บนกระบะรถ) — ขยายเต็มความกว้างคอลัมน์ */
+  #lpsTruckPhotos.lps-photo-grid .lot-photo-thumb-img { height: 62mm; }
+
+  /* รูปถ่ายหน้างานชั่งน้ำหนัก (ตาชั่ง/ยาง) — แนบต่อจากตาราง แนวตั้ง 3 รูปต่อแถว */
+  .lps-weighing-photos-title { font-size: 9pt; font-weight: 700; color: #1b5e20; margin: 3mm 0 2mm; }
+  #lpsWeighingPhotos.lps-photo-grid .lot-photo-thumb-img { height: 78mm; }
+  #lpsWeighingPhotos.lps-photo-grid { page-break-inside: auto; }
+  #lpsWeighingPhotos .lot-photo-thumb-link { page-break-inside: avoid; }
 
   .lps-signoff { display: flex; justify-content: space-between; margin-top: 14mm; page-break-inside: avoid; }
   .lps-sign-box { width: 30%; text-align: center; font-size: 9pt; }

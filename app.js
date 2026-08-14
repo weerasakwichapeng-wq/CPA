@@ -4258,6 +4258,7 @@ function renderLotDetail(params) {
     // 2. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
     const srcTb = $("#lpsSourceTable tbody");
     srcTb.innerHTML = "";
+    const weighingPhotos = [];
     lot.sources.forEach(g => {
       let deliveryQuota = 0, hasQuotaData = false;
       (g.plots || []).forEach(plotName => {
@@ -4277,7 +4278,7 @@ function renderLotDetail(params) {
       const quotaCell = el("td", { rowspan, class: overQuota ? "lps-quota-bad" : "" },
         hasQuotaData ? (overQuota ? `⚠️ เกิน (${fmtMoney(deliveryQuota)})` : `ปกติ (${fmtMoney(deliveryQuota)})`) : "-");
       if (!weighings.length) {
-        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 7 }, "ไม่มีรอบชั่ง"), quotaCell));
+        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 6 }, "ไม่มีรอบชั่ง"), quotaCell));
         return;
       }
       weighings.forEach((w, wi) => {
@@ -4292,13 +4293,12 @@ function renderLotDetail(params) {
           el("td", null, fmtMoney(amount)),
           el("td", null, fmtNum(dry, 2)),
           el("td", null, safe(w.weighSlipNo)),
-          el("td", { class: "lps-photo-cell" },
-            renderPhotoThumbLink(w.scalePhoto, "ตาชั่ง"),
-            renderPhotoThumbLink(w.rubberPhoto, "ยาง"),
-          ),
         );
         if (wi === 0) tr.append(quotaCell);
         srcTb.append(tr);
+        const roundLabel = `${g.fmu || ""} รอบ ${wi + 1}`;
+        if (w.scalePhoto) weighingPhotos.push([w.scalePhoto, `ตาชั่ง — ${roundLabel}`]);
+        if (w.rubberPhoto) weighingPhotos.push([w.rubberPhoto, `ยาง — ${roundLabel}`]);
       });
     });
     const srcTf = $("#lpsSourceTable tfoot");
@@ -4309,8 +4309,19 @@ function renderLotDetail(params) {
       el("td", null, ""),
       el("td", null, fmtMoney(totals.totalAmount)),
       el("td", null, fmtNum(totals.totalDrcKg, 2)),
-      el("td", { colspan: 3 }, ""),
+      el("td", { colspan: 2 }, ""),
     ));
+
+    // รูปถ่ายหน้างาน (ตาชั่ง/ยาง) ของทุกรอบชั่ง — แนบต่อจากตาราง แนวตั้ง 3 รูปต่อแถว แยกจากตารางเพื่อให้ขยายขนาดได้เต็มที่
+    const weighingPhotosEl = $("#lpsWeighingPhotos");
+    weighingPhotosEl.innerHTML = "";
+    const weighingPhotosTitle = $(".lps-weighing-photos-title");
+    if (weighingPhotos.length) {
+      weighingPhotosTitle.style.display = "";
+      weighingPhotos.forEach(([photo, label]) => weighingPhotosEl.append(renderPhotoThumbLink(photo, label)));
+    } else {
+      weighingPhotosTitle.style.display = "none";
+    }
 
     // 3. ใบเสร็จรับเงิน
     const receiptEl = $("#lpsReceiptPhoto");
