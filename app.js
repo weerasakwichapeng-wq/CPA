@@ -4270,7 +4270,7 @@ function renderLotDetail(params) {
       const quotaCell = el("td", { rowspan, class: overQuota ? "lps-quota-bad" : "" },
         hasQuotaData ? (overQuota ? `⚠️ เกิน (${fmtMoney(deliveryQuota)})` : `ปกติ (${fmtMoney(deliveryQuota)})`) : "-");
       if (!weighings.length) {
-        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 6 }, "ไม่มีรอบชั่ง"), quotaCell));
+        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 7 }, "ไม่มีรอบชั่ง"), quotaCell));
         return;
       }
       weighings.forEach((w, wi) => {
@@ -4285,6 +4285,10 @@ function renderLotDetail(params) {
           el("td", null, fmtMoney(amount)),
           el("td", null, fmtNum(dry, 2)),
           el("td", null, safe(w.weighSlipNo)),
+          el("td", { class: "lps-photo-cell" },
+            renderPhotoThumbLink(w.scalePhoto, "ตาชั่ง"),
+            renderPhotoThumbLink(w.rubberPhoto, "ยาง"),
+          ),
         );
         if (wi === 0) tr.append(quotaCell);
         srcTb.append(tr);
@@ -4298,7 +4302,7 @@ function renderLotDetail(params) {
       el("td", null, ""),
       el("td", null, fmtMoney(totals.totalAmount)),
       el("td", null, fmtNum(totals.totalDrcKg, 2)),
-      el("td", { colspan: 2 }, ""),
+      el("td", { colspan: 3 }, ""),
     ));
 
     // 3. ใบเสร็จรับเงิน

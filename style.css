@@ -3179,10 +3179,16 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-quota-bad { color: #b71c1c; font-weight: 700; }
   .lps-over-quota { background: #ffebee; }
 
-  .lps-photo-row { display: flex; flex-wrap: wrap; gap: 3mm; }
-  .lps-photo-row .lot-photo-thumb-link { width: 30mm; }
-  .lps-photo-row .lot-photo-thumb-img { width: 30mm; height: 22mm; }
-  .lps-photo-row .lot-photo-thumb-cap { font-size: 6.5pt; }
+  .lps-photo-row { display: flex; flex-wrap: wrap; gap: 4mm; }
+  .lps-photo-row .lot-photo-thumb-link { width: 50mm; }
+  .lps-photo-row .lot-photo-thumb-img { width: 50mm; height: 38mm; }
+  .lps-photo-row .lot-photo-thumb-cap { font-size: 7pt; }
+
+  /* รูปถ่ายตาชั่ง/ยาง ในตารางแปลงต้นทาง — เล็กกว่าแถวรูปเดี่ยวเพราะอยู่ในเซลล์ตาราง แต่ใหญ่ขึ้นจากเดิม */
+  .lps-photo-cell { display: flex; flex-direction: column; gap: 1.5mm; }
+  .lps-photo-cell .lot-photo-thumb-link { width: 26mm; }
+  .lps-photo-cell .lot-photo-thumb-img { width: 26mm; height: 20mm; }
+  .lps-photo-cell .lot-photo-thumb-cap { font-size: 6pt; }
 
   .lps-signoff { display: flex; justify-content: space-between; margin-top: 12mm; page-break-inside: avoid; }
   .lps-sign-box { width: 30%; text-align: center; font-size: 9pt; }
