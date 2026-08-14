@@ -647,6 +647,11 @@ function fmtNum(n, digits) {
   if (isNaN(v)) return n;
   return v.toLocaleString("th-TH", { maximumFractionDigits: digits ?? 2 });
 }
+/* เงิน/ราคา — บังคับทศนิยม 2 ตำแหน่งเสมอ (ต่างจาก fmtNum ที่ตัดศูนย์ท้ายทิ้ง) */
+function fmtMoney(n) {
+  const v = Number(n) || 0;
+  return v.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 function safe(s) { return (s == null || s === "") ? "-" : s; }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
@@ -3790,14 +3795,31 @@ function renderLotForm(params) {
     return { tapperName: "", weightKg: "", pricePerKg: defaultPrice || "", weighSlipNo: "", scalePhoto: null, rubberPhoto: null };
   }
 
+  // อัพเดทยอดรวมท้ายตาราง — เรียกทุกครั้งที่ตัวเลขเปลี่ยน โดยไม่รื้อ DOM ของแถว/ช่องกรอกใดๆ
+  function recalcFooter() {
+    const drcPct = (Number(form.elements.drcPercent.value) || 65) / 100;
+    let totalW = 0, totalD = 0, totalAmt = 0, totalPlots = 0;
+    sources.forEach(g => {
+      totalPlots += (g.plots || []).length;
+      (g.weighings || []).forEach(w => {
+        const weight = Number(w.weightKg) || 0;
+        totalW += weight;
+        totalD += weight * drcPct;
+        totalAmt += weight * (Number(w.pricePerKg) || 0);
+      });
+    });
+    $("#srcTotalWeight").textContent = fmtNum(totalW, 2);
+    $("#srcTotalAmount").textContent = fmtMoney(totalAmt);
+    $("#srcTotalDry").textContent = fmtNum(totalD, 2);
+    $("#srcPlotCount").textContent = `${totalPlots} แปลง (${sources.length} FMU)`;
+    $("#srcEmptyMsg").style.display = sources.length ? "none" : "";
+  }
+
   function renderSources() {
     const tbody = $("#srcPlotRows");
     tbody.innerHTML = "";
-    const drcPct = (Number(form.elements.drcPercent.value) || 65) / 100;
-    let totalW = 0, totalD = 0, totalAmt = 0, totalPlots = 0;
 
     sources.forEach((g, gi) => {
-      totalPlots += (g.plots || []).length;
       const groupCell = el("td", { rowspan: Math.max(g.weighings.length, 1) },
         el("b", null, safe(g.fmu)), el("br"),
         el("span", { class: "muted" }, (g.plots || []).join(", ")), el("br"),
@@ -3805,11 +3827,11 @@ function renderLotForm(params) {
         el("div", { class: "src-group-actions" },
           el("button", {
             type: "button", class: "btn btn-small btn-primary",
-            onclick: () => { g.weighings.push(newWeighing(g.weighings[0] && g.weighings[0].pricePerKg)); renderSources(); },
+            onclick: () => { g.weighings.push(newWeighing(g.weighings[0] && g.weighings[0].pricePerKg)); renderSources(); recalcFooter(); },
           }, "＋ เพิ่มรอบชั่ง"),
           el("button", {
             type: "button", class: "btn btn-small btn-secondary",
-            onclick: () => { sources.splice(gi, 1); renderSources(); },
+            onclick: () => { sources.splice(gi, 1); renderSources(); recalcFooter(); },
           }, "🗑️ ลบทั้ง FMU"),
         ),
       );
@@ -3823,11 +3845,19 @@ function renderLotForm(params) {
       }
 
       g.weighings.forEach((w, wi) => {
-        const weight = Number(w.weightKg) || 0;
-        const price = Number(w.pricePerKg) || 0;
-        const amount = weight * price;
-        const dry = weight * drcPct;
-        totalW += weight; totalD += dry; totalAmt += amount;
+        // ช่อง "ยอดเงิน" และ "DRC แห้ง" อัพเดทสดตอนพิมพ์ — แก้เฉพาะ textContent ของช่องนี้เท่านั้น
+        // ไม่เรียก renderSources() ซ้ำ เพราะจะรื้อ <input> ทั้งตารางทิ้งแล้วสร้างใหม่ ทำให้ช่องกรอก
+        // เสีย focus พิมพ์เลขต่อเนื่องไม่ได้ (ต้องคลิกใหม่ทุกตัวอักษร)
+        const amountCell = el("td", null, fmtMoney((Number(w.weightKg) || 0) * (Number(w.pricePerKg) || 0)));
+        const dryCell = el("td", null, fmtNum((Number(w.weightKg) || 0) * (Number(form.elements.drcPercent.value) || 65) / 100, 2));
+        function updateRowCalc() {
+          const weight = Number(w.weightKg) || 0;
+          const price = Number(w.pricePerKg) || 0;
+          amountCell.textContent = fmtMoney(weight * price);
+          dryCell.textContent = fmtNum(weight * (Number(form.elements.drcPercent.value) || 65) / 100, 2);
+          recalcFooter();
+        }
+
         const tr = el("tr", null);
         if (wi === 0) tr.append(groupCell);
         tr.append(
@@ -3838,21 +3868,21 @@ function renderLotForm(params) {
           el("td", null, el("input", {
             type: "number", step: "0.01", value: w.weightKg || "",
             style: "width:90px",
-            oninput: e => { w.weightKg = e.target.value; renderSources(); },
+            oninput: e => { w.weightKg = e.target.value; updateRowCalc(); },
           })),
           el("td", null, el("input", {
             type: "number", step: "0.01", value: w.pricePerKg || "",
             style: "width:80px",
-            oninput: e => { w.pricePerKg = e.target.value; renderSources(); },
+            oninput: e => { w.pricePerKg = e.target.value; updateRowCalc(); },
           })),
-          el("td", null, fmtNum(amount, 2)),
+          amountCell,
           el("td", null, el("input", {
             type: "text", value: w.weighSlipNo || "",
             placeholder: "เลขใบชั่ง/รอบ",
             style: "width:120px",
             oninput: e => { w.weighSlipNo = e.target.value; },
           })),
-          el("td", null, fmtNum(dry, 2)),
+          dryCell,
           el("td", null,
             buildPhotoPickerButton("ตาชั่ง", () => w.scalePhoto, photo => { w.scalePhoto = photo; }),
             el("br"),
@@ -3860,23 +3890,18 @@ function renderLotForm(params) {
           ),
           el("td", null, el("button", {
             type: "button", class: "btn btn-small btn-secondary",
-            onclick: () => { g.weighings.splice(wi, 1); renderSources(); },
+            onclick: () => { g.weighings.splice(wi, 1); renderSources(); recalcFooter(); },
           }, "🗑️")),
         );
         tbody.append(tr);
       });
     });
-
-    $("#srcTotalWeight").textContent = fmtNum(totalW, 2);
-    $("#srcTotalAmount").textContent = fmtNum(totalAmt, 2);
-    $("#srcTotalDry").textContent = fmtNum(totalD, 2);
-    $("#srcPlotCount").textContent = `${totalPlots} แปลง (${sources.length} FMU)`;
-    $("#srcEmptyMsg").style.display = sources.length ? "none" : "";
   }
   renderSources();
+  recalcFooter();
 
-  // Recalc dry when DRC % changes
-  form.elements.drcPercent.addEventListener("input", renderSources);
+  // เปลี่ยน DRC % กระทบทุกแถว — รื้อทั้งตารางได้ตามปกติ (ไม่ใช่ช่องที่กำลังพิมพ์อยู่)
+  form.elements.drcPercent.addEventListener("input", () => { renderSources(); recalcFooter(); });
 
   // ── Plot search & add ── รายการผลค้นหาเปิดค้างไว้ได้ กดเพิ่มได้หลายแปลงต่อเนื่องโดยไม่ต้องพิมพ์ค้นหาใหม่
   const sInput = $("#srcPlotSearch");
@@ -3927,6 +3952,7 @@ function renderLotForm(params) {
               });
             }
             renderSources();
+            recalcFooter();
             // รอ tick ถัดไปก่อนสร้างรายการใหม่ — ถ้ารื้อ DOM ทันทีในตัว handler นี้ ปุ่มที่เพิ่งคลิกจะหลุดจาก
             // DOM ก่อน document click-outside listener (bubble phase) เช็คว่าคลิกอยู่ใน sugBox หรือไม่
             // ทำให้กล่องผลค้นหาปิดไปเองทั้งที่ยังไม่ได้คลิกออกไปข้างนอกจริง ๆ
@@ -4019,7 +4045,7 @@ function renderLotDetail(params) {
   [
     { icon: "⚖️", label: "น้ำหนักรวม (รับซื้อ)", value: fmtNum(totals.totalWeightKg, 2) + " กก.", cls: "qt-orange" },
     { icon: "💧", label: `ยางแห้ง DRC ${lot.drcPercent}%`, value: fmtNum(totals.totalDrcKg, 2) + " กก.", cls: "qt-green" },
-    { icon: "💰", label: "ยอดเงินรวม", value: fmtNum(totals.totalAmount, 2) + " ฿", cls: "qt-yellow" },
+    { icon: "💰", label: "ยอดเงินรวม", value: fmtMoney(totals.totalAmount) + " ฿", cls: "qt-yellow" },
     { icon: "🌱", label: "แปลงต้นทาง", value: totals.plotCount + " แปลง", cls: "qt-blue" },
     { icon: "📍", label: "FMU ที่เกี่ยวข้อง", value: fmus.size + " FMU", cls: "qt-teal" },
     { icon: "✅", label: "พื้นที่ FSC รวม", value: fmtNum(fscAreaSum, 2) + " ไร่", cls: "qt-purple" },
@@ -4091,8 +4117,8 @@ function renderLotDetail(params) {
         el("td", null, safe(w.tapperName)),
         el("td", null, fmtNum(w.weightKg, 2)),
         el("td", null, fmtNum(pct, 1) + "%"),
-        el("td", null, fmtNum(w.pricePerKg, 2)),
-        el("td", null, fmtNum(amount, 2)),
+        el("td", null, fmtMoney(w.pricePerKg)),
+        el("td", null, fmtMoney(amount)),
         el("td", null, fmtNum(dry, 2)),
         el("td", null, safe(w.weighSlipNo)),
         el("td", { class: "lot-photo-cell" },
