@@ -3139,47 +3139,54 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 }
 
-/* ─── ใบรับซื้อ (Lot detail) print layout ─── */
+/* ─── ใบรับซื้อ (Lot detail) — เอกสารพิมพ์แยกจาก dashboard บนจอ ───
+   dashboard บนจอมีแผนที่ Leaflet + ตาราง rowspan หลายคอลัมน์ ซึ่งพิมพ์ไม่น่าเชื่อถือ
+   (เนื้อหาขาดหาย/ตัดหน้าแปลกๆ) จึงสร้างเอกสารเฉพาะสำหรับพิมพ์ (#lotPrintSheet) แทน */
+.lot-print-sheet { display: none; }
 @media print {
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: 12mm; }
   .page-lot-detail { max-width: none !important; }
-  .page-lot-detail .dash-grid-12 { display: block !important; }
-  .page-lot-detail .panel {
-    box-shadow: none !important;
-    border: 1px solid #ccc !important;
-    border-radius: 4px !important;
-    padding: 4mm !important;
-    margin-bottom: 4mm !important;
-    page-break-inside: avoid;
+  .page-lot-detail .dash-grid-12,
+  .page-lot-detail .lot-detail-header { display: none !important; }
+  .page-lot-detail .lot-print-sheet {
+    display: block !important;
+    font-family: "Prompt", sans-serif;
+    color: #111;
   }
-  .page-lot-detail .chart-head h3 { font-size: 11pt !important; }
-  .page-lot-detail .chart-sub { font-size: 8pt !important; }
-  .page-lot-detail .lot-detail-header { margin-bottom: 4mm !important; }
-  .page-lot-detail .lot-id-big { font-size: 18pt !important; }
 
-  /* KPI tiles — compact grid, no shadow */
-  .page-lot-detail .quota-grid { gap: 2mm !important; }
-  .page-lot-detail .quota-tile { padding: 2mm 3mm !important; box-shadow: none !important; border: 1px solid #ddd !important; }
-  .page-lot-detail .qt-value { font-size: 11pt !important; }
-  .page-lot-detail .qt-label { font-size: 7.5pt !important; }
+  .lps-header { text-align: center; margin-bottom: 5mm; border-bottom: 2px solid #1b5e20; padding-bottom: 3mm; }
+  .lps-company { font-size: 11pt; font-weight: 600; color: #1b5e20; }
+  .lps-title { font-size: 16pt; font-weight: 700; margin: 1mm 0; }
+  .lps-meta { font-size: 9pt; color: #444; }
 
-  /* Source-plot table — shrink to fit A4 width */
-  .page-lot-detail .data-table { font-size: 7.5pt !important; }
-  .page-lot-detail .data-table th, .page-lot-detail .data-table td { padding: 1.5mm 2mm !important; }
-  .page-lot-detail tr.row-over-quota { background: #ffebee !important; }
+  .lps-section { margin-bottom: 5mm; page-break-inside: avoid; }
+  .lps-sec-title {
+    font-size: 10.5pt; font-weight: 700; color: white; background: #2e7d32;
+    padding: 1.5mm 3mm; border-radius: 3px; margin-bottom: 2mm;
+  }
 
-  /* Photos — small thumbnails only, no need for full size on paper */
-  .page-lot-detail .lot-photo-thumb-img { width: 40px !important; height: 32px !important; }
-  .page-lot-detail .lot-photo-thumb-cap { font-size: 6.5pt !important; }
-  .page-lot-detail .lot-photo-row { gap: 2mm !important; }
+  .lps-kv-table { border-collapse: collapse; width: 100%; font-size: 9pt; }
+  .lps-kv-table td { padding: 1mm 2mm; border: 1px solid #ddd; }
+  .lps-kv-table td.lps-k { font-weight: 600; background: #f5f5f5; width: 35mm; }
 
-  /* Interactive map doesn't print reliably — keep a fixed compact frame */
-  .page-lot-detail .detail-map { height: 70mm !important; border: 1px solid #ccc !important; }
-  .page-lot-detail .leaflet-control-zoom,
-  .page-lot-detail .leaflet-control-attribution { display: none !important; }
+  .lps-table { width: 100%; border-collapse: collapse; font-size: 8pt; page-break-inside: auto; }
+  .lps-table th, .lps-table td { border: 1px solid #999; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
+  .lps-table th { background: #e8f5e9; font-weight: 700; text-align: center; }
+  .lps-table td:nth-child(n+3) { text-align: right; }
+  .lps-table tr { page-break-inside: avoid; }
+  .lps-table .lps-total-row { font-weight: 700; background: #f1f8e9; }
+  .lps-table .lps-total-row td:nth-child(n+3) { text-align: right; }
+  .lps-quota-bad { color: #b71c1c; font-weight: 700; }
+  .lps-over-quota { background: #ffebee; }
 
-  .page-lot-detail dl.kv { font-size: 8.5pt !important; }
-  .page-lot-detail .badges .badge { font-size: 8pt !important; }
+  .lps-photo-row { display: flex; flex-wrap: wrap; gap: 3mm; }
+  .lps-photo-row .lot-photo-thumb-link { width: 30mm; }
+  .lps-photo-row .lot-photo-thumb-img { width: 30mm; height: 22mm; }
+  .lps-photo-row .lot-photo-thumb-cap { font-size: 6.5pt; }
+
+  .lps-signoff { display: flex; justify-content: space-between; margin-top: 12mm; page-break-inside: avoid; }
+  .lps-sign-box { width: 30%; text-align: center; font-size: 9pt; }
+  .lps-sign-line { border-bottom: 1px solid #333; height: 12mm; margin-bottom: 2mm; }
 }
 
 /* Scrollbar */

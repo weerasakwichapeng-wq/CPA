@@ -853,6 +853,72 @@
           <dl class="kv" id="lotDetailKv"></dl>
         </section>
       </div>
+
+      <!-- ══════════ ใบรับซื้อ — เอกสารสำหรับพิมพ์เท่านั้น (ซ่อนตอนดูบนจอ) ══════════ -->
+      <div class="lot-print-sheet" id="lotPrintSheet">
+        <div class="lps-header">
+          <div class="lps-company" id="lpsCompany"></div>
+          <div class="lps-title">ใบรับซื้อยางพารา</div>
+          <div class="lps-meta" id="lpsMeta"></div>
+        </div>
+
+        <div class="lps-section">
+          <div class="lps-sec-title">1. ตรวจเช็ครถขนส่ง</div>
+          <table class="lps-kv-table" id="lpsTruckKv"><tbody></tbody></table>
+          <div class="lps-photo-row" id="lpsTruckPhotos"></div>
+        </div>
+
+        <div class="lps-section">
+          <div class="lps-sec-title">2. แปลงต้นทาง (Source Plots)</div>
+          <table class="lps-table" id="lpsSourceTable">
+            <thead>
+              <tr>
+                <th>FMU / แปลง / เกษตรกร</th>
+                <th>คนกรีด</th>
+                <th>น้ำหนัก<br>(กก.)</th>
+                <th>ราคา<br>/กก.</th>
+                <th>ยอดเงิน<br>(฿)</th>
+                <th>DRC แห้ง<br>(กก.)</th>
+                <th>ใบชั่ง</th>
+                <th>โควต้า/รอบ</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+
+        <div class="lps-section">
+          <div class="lps-sec-title">3. ใบเสร็จรับเงิน</div>
+          <div class="lps-photo-row" id="lpsReceiptPhoto"></div>
+        </div>
+
+        <div class="lps-section">
+          <div class="lps-sec-title">4. ปิดรถ</div>
+          <table class="lps-kv-table" id="lpsClosureKv"><tbody></tbody></table>
+          <div class="lps-photo-row" id="lpsClosurePhoto"></div>
+        </div>
+
+        <div class="lps-section" id="lpsNotesSection">
+          <div class="lps-sec-title">หมายเหตุ</div>
+          <div id="lpsNotes"></div>
+        </div>
+
+        <div class="lps-signoff">
+          <div class="lps-sign-box">
+            <div class="lps-sign-line"></div>
+            <div>ผู้ขาย (เกษตรกร / ตัวแทน)</div>
+          </div>
+          <div class="lps-sign-box">
+            <div class="lps-sign-line"></div>
+            <div>ผู้ซื้อ (RM / เจ้าหน้าที่รับซื้อ)</div>
+          </div>
+          <div class="lps-sign-box">
+            <div class="lps-sign-line"></div>
+            <div>วันที่</div>
+          </div>
+        </div>
+      </div>
     </div>
   </template>
 
@@ -1247,6 +1313,6 @@
   <script src="data/wdpa.js"></script>
   <script src="data/bufferzone.js?v=2026072401"></script>
   <script src="data/satellite-config.js"></script>
-  <script src="app.js?v=2026081504"></script>
+  <script src="app.js?v=2026081505"></script>
 </body>
 </html>

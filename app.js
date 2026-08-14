@@ -4228,6 +4228,107 @@ function renderLotDetail(params) {
   }
   renderClosurePanel();
 
+  // ── เอกสาร "ใบรับซื้อ" สำหรับพิมพ์ — สร้างแยกจาก dashboard บนจอ เพราะแผนที่/ตารางแบบ
+  //    rowspan/กริดหลายคอลัมน์ พิมพ์ไม่น่าเชื่อถือ (เนื้อหาขาดหาย ตัดหน้าแปลกๆ) ──
+  function renderPrintSheet() {
+    $("#lpsCompany").textContent = lot.buyer || "บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด";
+    $("#lpsMeta").innerHTML = `เลขที่ล็อต <b>${safe(lot.lotId)}</b> &nbsp;·&nbsp; วันที่รับซื้อ ${safe(lot.purchaseDate)} &nbsp;·&nbsp; HUB ${safe(lot.hub)} &nbsp;·&nbsp; ${safe(lot.productForm)} &nbsp;·&nbsp; ${safe(lot.fscClaim)}`;
+
+    // 1. ตรวจเช็ครถขนส่ง
+    const truck = lot.truck || {};
+    const truckTb = $("#lpsTruckKv tbody");
+    truckTb.innerHTML = "";
+    [
+      ["ประเภทรถ", truck.type], ["ทะเบียนรถ", truck.plate], ["ชื่อผู้ขับขี่", truck.driverName],
+      ["ไม่มีสิ่งปลอมปนบนรถ", truck.contamCheck === "pass" ? "ผ่าน" : truck.contamCheck === "fail" ? "ไม่ผ่าน" : "-"],
+    ].forEach(([k, v]) => truckTb.append(el("tr", null, el("td", { class: "lps-k" }, k), el("td", null, safe(v)))));
+    const truckPhotosEl = $("#lpsTruckPhotos");
+    truckPhotosEl.innerHTML = "";
+    [["front", "หน้ารถ"], ["side", "ข้างรถ"], ["bed", "บนกระบะรถ"]].forEach(([key, label]) => {
+      truckPhotosEl.append(renderPhotoThumbLink(truck.photos && truck.photos[key], label));
+    });
+
+    // 2. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
+    const srcTb = $("#lpsSourceTable tbody");
+    srcTb.innerHTML = "";
+    lot.sources.forEach(g => {
+      let deliveryQuota = 0, hasQuotaData = false;
+      (g.plots || []).forEach(plotName => {
+        const pr = allRecs.find(x => x.plot === plotName);
+        if (!pr) return;
+        const dq = Number(getQuotaFor(pr).deliveryPerRound) || 0;
+        if (dq > 0) { deliveryQuota += dq; hasQuotaData = true; }
+      });
+      const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+      const overQuota = hasQuotaData && groupWeight > deliveryQuota;
+      const weighings = g.weighings && g.weighings.length ? g.weighings : [];
+      const rowspan = Math.max(weighings.length, 1);
+      const groupCell = el("td", { rowspan },
+        el("b", null, safe(g.fmu)), ` (${(g.plots || []).join(", ")})`, el("br"),
+        safe(g.nameTh),
+      );
+      const quotaCell = el("td", { rowspan, class: overQuota ? "lps-quota-bad" : "" },
+        hasQuotaData ? (overQuota ? `⚠️ เกิน (${fmtMoney(deliveryQuota)})` : `ปกติ (${fmtMoney(deliveryQuota)})`) : "-");
+      if (!weighings.length) {
+        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 6 }, "ไม่มีรอบชั่ง"), quotaCell));
+        return;
+      }
+      weighings.forEach((w, wi) => {
+        const dry = (Number(w.weightKg) || 0) * (Number(lot.drcPercent) / 100);
+        const amount = (Number(w.weightKg) || 0) * (Number(w.pricePerKg) || 0);
+        const tr = el("tr", { class: overQuota ? "lps-over-quota" : "" });
+        if (wi === 0) tr.append(groupCell);
+        tr.append(
+          el("td", null, safe(w.tapperName)),
+          el("td", null, fmtNum(w.weightKg, 2)),
+          el("td", null, fmtMoney(w.pricePerKg)),
+          el("td", null, fmtMoney(amount)),
+          el("td", null, fmtNum(dry, 2)),
+          el("td", null, safe(w.weighSlipNo)),
+        );
+        if (wi === 0) tr.append(quotaCell);
+        srcTb.append(tr);
+      });
+    });
+    const srcTf = $("#lpsSourceTable tfoot");
+    srcTf.innerHTML = "";
+    srcTf.append(el("tr", { class: "lps-total-row" },
+      el("td", { colspan: 2 }, "รวมทั้งหมด"),
+      el("td", null, fmtNum(totals.totalWeightKg, 2)),
+      el("td", null, ""),
+      el("td", null, fmtMoney(totals.totalAmount)),
+      el("td", null, fmtNum(totals.totalDrcKg, 2)),
+      el("td", { colspan: 2 }, ""),
+    ));
+
+    // 3. ใบเสร็จรับเงิน
+    const receiptEl = $("#lpsReceiptPhoto");
+    receiptEl.innerHTML = "";
+    receiptEl.append(renderPhotoThumbLink(lot.receiptPhoto, "ใบเสร็จรับเงิน"));
+
+    // 4. ปิดรถ
+    const closure = lot.closure || {};
+    const closureTb = $("#lpsClosureKv tbody");
+    closureTb.innerHTML = "";
+    closureTb.append(el("tr", null, el("td", { class: "lps-k" }, "สถานะ"), el("td", null, closure.closed ? "🔒 ปิดรถแล้ว" : "ยังไม่ปิดรถ")));
+    if (closure.closed) {
+      closureTb.append(el("tr", null, el("td", { class: "lps-k" }, "ปิดเมื่อ"), el("td", null, closure.closedAt ? new Date(closure.closedAt).toLocaleString("th-TH") : "-")));
+    }
+    const closurePhotoEl = $("#lpsClosurePhoto");
+    closurePhotoEl.innerHTML = "";
+    closurePhotoEl.append(renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
+
+    // หมายเหตุ
+    const notesSection = $("#lpsNotesSection");
+    if (lot.note) {
+      $("#lpsNotes").textContent = lot.note;
+      notesSection.style.display = "";
+    } else {
+      notesSection.style.display = "none";
+    }
+  }
+  renderPrintSheet();
+
   // Actions
   $("#lotEditBtn").onclick = () => { location.hash = `#/lots/new/${encodeURIComponent(lot.lotId)}`; };
   $("#lotPrintBtn").onclick = () => window.print();
