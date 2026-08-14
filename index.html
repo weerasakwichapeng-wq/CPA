@@ -22,6 +22,7 @@
       <a href="#/trace" data-route="trace" data-requires-role="viewer">🔍 ตรวจสอบย้อนกลับ</a>
       <a href="#/farmers" data-route="farmers" data-requires-role="manager">👥 เกษตรกร</a>
       <a href="#/lots" data-route="lots" data-requires-role="manager">📦 ล็อตรับซื้อ</a>
+      <a href="#/audits" data-route="audits" data-requires-role="manager">✅ ตรวจติดตามแปลง</a>
       <a href="#/report" data-route="report" data-requires-role="manager">📋 สร้างแผนที่รายงาน</a>
       <a href="#/add" data-route="add" data-requires-role="manager">➕ บันทึกข้อมูลใหม่</a>
       <a href="#/users" data-route="users" data-requires-role="admin">👤 จัดการบัญชี</a>
@@ -175,6 +176,7 @@
         <div class="actions-bar">
           <button class="btn btn-primary" id="reportBtn">📋 สร้างแผนที่รายแปลง</button>
           <button class="btn btn-fsc" id="complianceBtn">📑 รายงาน FSC Compliance</button>
+          <button class="btn btn-audit" id="auditBtn">✅ ตรวจติดตามแปลง</button>
           <button class="btn" id="editBtn">✏️ แก้ไขข้อมูล</button>
           <button class="btn btn-secondary" id="printBtn">🖨️ พิมพ์</button>
         </div>
@@ -657,6 +659,29 @@
       </div>
 
       <form id="lotForm" class="form-grid">
+        <fieldset class="full">
+          <legend>1. ตรวจเช็ครถขนส่ง</legend>
+          <label>ประเภทรถ
+            <select name="truckType">
+              <option value="รถหกล้อ">รถหกล้อ</option>
+              <option value="รถพ่วง">รถพ่วง</option>
+              <option value="รถกระบะ">รถกระบะ</option>
+            </select>
+          </label>
+          <label>ทะเบียนรถ <input name="truckPlate" placeholder="เช่น 81-1234 เลย"></label>
+          <label>ชื่อผู้ขับขี่ <input name="truckDriverName" placeholder="ชื่อ-นามสกุล"></label>
+          <label>ไม่มีสิ่งปลอมปนบนรถ
+            <select name="truckContamCheck">
+              <option value="pass">ผ่าน — ไม่มีสิ่งปลอมปน</option>
+              <option value="fail">ไม่ผ่าน — พบสิ่งปลอมปน</option>
+            </select>
+          </label>
+          <div class="full">
+            <div class="photo-req-label">ถ่ายรูปรถ (หน้ารถ / ข้างรถ / บนกระบะรถ)</div>
+            <div class="full" id="truckPhotoButtons"></div>
+          </div>
+        </fieldset>
+
         <fieldset>
           <legend>ข้อมูลล็อต</legend>
           <label>วันที่รับซื้อ <input name="purchaseDate" type="date" required></label>
@@ -712,10 +737,13 @@
             <thead>
               <tr>
                 <th>FMU / แปลง</th>
-                <th>เกษตรกร</th>
+                <th>เกษตรกร / ชื่อคนกรีด</th>
                 <th>น้ำหนัก (กก.)</th>
+                <th>ราคา/กก.</th>
+                <th>ยอดเงิน (฿)</th>
                 <th>เลขใบชั่ง / รอบส่ง</th>
                 <th>DRC แห้ง (กก.)</th>
+                <th>รูปถ่ายหน้างาน</th>
                 <th></th>
               </tr>
             </thead>
@@ -725,12 +753,21 @@
                 <td colspan="2" style="text-align:right"><b>รวม</b></td>
                 <td><b id="srcTotalWeight">0.00</b></td>
                 <td></td>
+                <td><b id="srcTotalAmount">0.00</b></td>
+                <td></td>
                 <td><b id="srcTotalDry">0.00</b></td>
+                <td></td>
                 <td><span class="muted" id="srcPlotCount">0 แปลง</span></td>
               </tr>
             </tfoot>
           </table>
           <p class="muted" id="srcEmptyMsg">ยังไม่มีแปลงต้นทาง — พิมพ์ชื่อแปลงหรือชื่อเกษตรกรในช่องด้านบนเพื่อเพิ่ม</p>
+        </fieldset>
+
+        <fieldset class="full">
+          <legend>6. ใบเสร็จรับเงิน</legend>
+          <p class="muted" style="margin-top:0">ถ่ายภาพใบเสร็จรับเงิน (มีตราประทับ FSC) — ระบุวัน/เวลา/พิกัด GPS อัตโนมัติ</p>
+          <div id="receiptPhotoButton"></div>
         </fieldset>
 
         <div class="actions-bar full">
@@ -748,6 +785,7 @@
         <div class="actions-bar">
           <button class="btn" id="lotEditBtn">✏️ แก้ไข</button>
           <button class="btn btn-secondary" id="lotPrintBtn">🖨️ พิมพ์ใบรับซื้อ</button>
+          <button class="btn btn-secondary" id="lotKmlBtn">📍 สร้าง KML แหล่งที่มา</button>
           <button class="btn btn-secondary" id="lotDeleteBtn">🗑️ ลบล็อต</button>
         </div>
       </div>
@@ -769,24 +807,45 @@
         </section>
 
         <section class="panel col-12">
+          <div class="chart-head"><h3>🚚 ตรวจเช็ครถขนส่ง</h3><span class="chart-sub">Truck check</span></div>
+          <dl class="kv" id="lotTruckKv"></dl>
+          <div id="lotTruckPhotos" class="lot-photo-row"></div>
+        </section>
+
+        <section class="panel col-12">
           <div class="chart-head"><h3>🌱 แปลงต้นทางในล็อตนี้</h3><span class="chart-sub">Source plots — Mass Balance breakdown</span></div>
           <table class="data-table" id="lotSourceTable">
             <thead>
               <tr>
                 <th>#</th>
                 <th>FMU / แปลง</th>
-                <th>เกษตรกร</th>
+                <th>เกษตรกร / คนกรีด</th>
                 <th>HUB</th>
                 <th>น้ำหนัก (กก.)</th>
                 <th>%</th>
+                <th>ราคา/กก.</th>
+                <th>ยอดเงิน (฿)</th>
                 <th>DRC แห้ง (กก.)</th>
                 <th>ใบชั่ง</th>
                 <th>FSC</th>
+                <th>รูปถ่าย</th>
+                <th>โควต้า/รอบ</th>
                 <th></th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
+          <p class="muted quota-warn-note" id="lotQuotaWarnNote" style="display:none">⚠️ มีแปลงที่น้ำหนักส่งเกินโควต้าต่อรอบที่กำหนดไว้ — ดูคอลัมน์ "โควต้า/รอบ"</p>
+        </section>
+
+        <section class="panel col-12">
+          <div class="chart-head"><h3>🧾 ใบเสร็จรับเงิน</h3></div>
+          <div id="lotReceiptPhoto" class="lot-photo-row"></div>
+        </section>
+
+        <section class="panel col-12">
+          <div class="chart-head"><h3>🔒 ปิดรถ (ปิดล็อต)</h3><span class="chart-sub">Truck closure — สำหรับตรวจสอบย้อนกลับ</span></div>
+          <div id="lotClosurePanel"></div>
         </section>
 
         <section class="panel col-12">
@@ -799,6 +858,151 @@
           <dl class="kv" id="lotDetailKv"></dl>
         </section>
       </div>
+    </div>
+  </template>
+
+  <template id="tpl-audits">
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h2>✅ ตรวจติดตามแปลง</h2>
+          <p class="page-sub">Field Audit Tracking — บันทึกการตรวจติดตามเกษตรกรสมาชิกโดย RM (อ้างอิง FO-WI-QP.PC.4-01-030)</p>
+        </div>
+        <span class="count-badge" id="auditCount"></span>
+      </div>
+
+      <div class="lots-toolbar">
+        <input type="search" id="auditSearch" placeholder="🔍 ค้นหา FMU, แปลง, ชื่อเกษตรกร...">
+        <select id="auditFilterFMU"><option value="">ทุก FMU</option></select>
+        <select id="auditFilterRound">
+          <option value="">ทุกรอบ</option>
+          <option value="1">ครั้งที่ 1</option>
+          <option value="2">ครั้งที่ 2</option>
+          <option value="3">ครั้งที่ 3</option>
+        </select>
+        <select id="auditFilterResult">
+          <option value="">ทุกผลการตรวจ</option>
+          <option value="fail">มีข้อไม่ผ่าน</option>
+          <option value="pass">ผ่านทั้งหมด</option>
+        </select>
+        <a href="#/audits/new" class="btn btn-primary">➕ บันทึกการตรวจใหม่</a>
+      </div>
+
+      <section class="panel panel-quota">
+        <div class="quota-grid" id="auditStats"></div>
+      </section>
+
+      <div class="table-wrap">
+        <table class="data-table" id="auditsTable">
+          <thead>
+            <tr>
+              <th>วันที่ตรวจ</th>
+              <th>FMU / แปลง</th>
+              <th>เจ้าของ</th>
+              <th>รอบตรวจ</th>
+              <th>ผู้ตรวจ (RM)</th>
+              <th>สรุปผล</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="muted" id="auditEmptyMsg" style="display:none">ยังไม่มีการบันทึกการตรวจติดตาม — กด "บันทึกการตรวจใหม่" เพื่อเริ่มต้น</p>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-audits-new">
+    <div class="page">
+      <div class="detail-topbar">
+        <a href="#/audits" class="back-link">← กลับรายการตรวจติดตาม</a>
+      </div>
+      <div class="page-header">
+        <div>
+          <h2 id="auditFormTitle">➕ บันทึกการตรวจติดตามใหม่</h2>
+          <p class="page-sub">Field Audit — Checklist การตรวจติดตามเกษตรกรสมาชิก</p>
+        </div>
+        <div class="lot-id-preview">
+          <div class="lot-id-label">เลขที่บันทึก (auto)</div>
+          <div class="lot-id-value" id="auditIdPreview">AUDIT-—</div>
+        </div>
+      </div>
+
+      <form id="auditForm" class="form-grid">
+        <fieldset class="full">
+          <legend>ข้อมูลแปลง</legend>
+          <label class="full" id="auditPlotPickerWrap">แปลงที่ตรวจ
+            <input type="text" id="auditPlotSearch" placeholder="พิมพ์ชื่อแปลง / FMU / ชื่อเกษตรกร เพื่อเลือกแปลง" autocomplete="off">
+            <div id="auditPlotSuggest" class="src-suggest"></div>
+          </label>
+          <dl class="kv" id="auditPlotInfo"></dl>
+        </fieldset>
+
+        <fieldset>
+          <legend>1. ข้อมูลทั่วไป (ปีละ 1 ครั้ง)</legend>
+          <label>วันที่ตรวจ <input type="date" name="auditDate" id="auditDate" required></label>
+          <label>รอบการตรวจ (4 เดือน)
+            <select name="auditRound" id="auditRound">
+              <option value="1">ครั้งที่ 1</option>
+              <option value="2">ครั้งที่ 2</option>
+              <option value="3">ครั้งที่ 3</option>
+            </select>
+          </label>
+          <label>จำนวนแรงงาน (คน) <input type="number" name="auditLaborCount" id="auditLaborCount" min="0"></label>
+          <label>สถานะการโค่นล้ม
+            <select name="auditCuttingStatus" id="auditCuttingStatus">
+              <option value="none">ยังไม่โค่นล้ม</option>
+              <option value="planned">โค่นล้ม (วางแผนโค่นปี)</option>
+            </select>
+          </label>
+          <label>ปีที่จะโค่น (ถ้ามี) <input type="text" name="auditCuttingYear" id="auditCuttingYear" placeholder="เช่น พ.ศ. 2570"></label>
+          <p class="muted full">*ถ้ามีการโค่นต้นต้องปลูกใหม่ทดแทนภายใน 2 ปี</p>
+          <label class="full">หมายเหตุทั่วไป <textarea name="auditGeneralNote" id="auditGeneralNote" rows="2"></textarea></label>
+        </fieldset>
+
+        <div class="full" id="auditChecklistSections"></div>
+
+        <fieldset class="full">
+          <legend>13. ค่าใช้จ่ายในการดำเนินงาน (ช่วงที่ตรวจนี้)</legend>
+          <div class="table-wrap">
+            <table class="data-table audit-expense-table">
+              <thead><tr><th>รายการ</th><th>จำนวนเงิน (บาท)</th><th>หมายเหตุ</th></tr></thead>
+              <tbody id="auditExpenseRows"></tbody>
+              <tfoot><tr><td style="text-align:right"><b>รวม</b></td><td><b id="auditExpenseTotal">0.00</b></td><td></td></tr></tfoot>
+            </table>
+          </div>
+        </fieldset>
+
+        <fieldset class="full">
+          <legend>14. สรุปผลการตรวจและแผนแก้ไข</legend>
+          <div class="table-wrap">
+            <table class="data-table audit-issues-table">
+              <thead><tr><th>ประเด็นที่พบ</th><th>ระดับความรุนแรง</th><th>แนวทางแก้ไข</th><th>กำหนดแล้วเสร็จ</th><th></th></tr></thead>
+              <tbody id="auditIssueRows"></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn btn-small" id="auditAddIssueBtn">➕ เพิ่มประเด็นที่พบ</button>
+          <p class="muted">* หากพบความเสี่ยงระดับสูง ให้เปิด NCR/CAR ทันที</p>
+        </fieldset>
+
+        <fieldset class="full">
+          <legend>รูปถ่ายการตรวจติดตาม</legend>
+          <div class="full" id="auditVisitPhotoContainer"></div>
+        </fieldset>
+
+        <fieldset class="full">
+          <legend>ลงชื่อ</legend>
+          <label>เกษตรกรสมาชิก (ชื่อผู้ยืนยัน) <input type="text" name="auditFarmerSign" id="auditFarmerSign"></label>
+          <label>ผู้ตรวจ (RM) <input type="text" name="auditRmName" id="auditRmName"></label>
+        </fieldset>
+
+        <div class="actions-bar full">
+          <button type="submit" class="btn btn-primary">💾 บันทึกการตรวจ</button>
+          <button type="button" class="btn btn-secondary" id="auditPrintBtn">🖨️ พิมพ์</button>
+          <button type="button" class="btn" id="auditCancelBtn">ยกเลิก</button>
+          <button type="button" class="btn btn-danger" id="auditDeleteBtn" style="display:none">🗑️ ลบการตรวจนี้</button>
+        </div>
+      </form>
     </div>
   </template>
 
@@ -1048,6 +1252,6 @@
   <script src="data/wdpa.js"></script>
   <script src="data/bufferzone.js?v=2026072401"></script>
   <script src="data/satellite-config.js"></script>
-  <script src="app.js?v=2026072401"></script>
+  <script src="app.js?v=2026081501"></script>
 </body>
 </html>

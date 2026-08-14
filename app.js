@@ -86,6 +86,7 @@ const LS_KEY = "fsc_custom_records";
 const LS_FILES = "fsc_doc_files";
 const LS_QUOTA = "fsc_quota_data";   // keyed by memberId or plot
 const LS_LOTS = "fsc_lots";          // array of lot objects
+const LS_AUDITS = "fsc_audits";      // array of field audit records
 const LS_USERS = "fsc_users";        // array of users (override window.USERS)
 const LS_SESSION = "fsc_session";    // current session { username, role, expiresAt }
 
@@ -220,6 +221,8 @@ const ROUTE_ROLES = {
   lots: "manager",
   "lots/new": "manager",
   lot: "manager",
+  audits: "manager",
+  "audits/new": "manager",
   compliance: "manager",
   ltfix: "admin",
   users: "admin",
@@ -362,6 +365,216 @@ function nextLotId() {
   }, 0);
   return `LOT-${ym}-${String(maxNum + 1).padStart(4, "0")}`;
 }
+/* ── Field audit storage (ตรวจติดตามรายแปลง) ──
+   อ้างอิงหัวข้อจาก FO-WI-QP.PC.4-01-030 Checklist การตรวจติดตามเกษตรกรสมาชิก */
+function loadAudits() { try { return JSON.parse(localStorage.getItem(LS_AUDITS) || "[]"); } catch { return []; } }
+function saveAudits(arr) { localStorage.setItem(LS_AUDITS, JSON.stringify(arr)); }
+function getAudit(auditId) { return loadAudits().find(a => a.id === auditId); }
+function upsertAudit(a) {
+  const all = loadAudits();
+  const idx = all.findIndex(x => x.id === a.id);
+  if (idx >= 0) all[idx] = a; else all.unshift(a);
+  saveAudits(all);
+}
+function deleteAudit(auditId) { saveAudits(loadAudits().filter(a => a.id !== auditId)); }
+function nextAuditId() {
+  const now = new Date();
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthAudits = loadAudits().filter(a => a.id && a.id.startsWith(`AUDIT-${ym}-`));
+  const maxNum = monthAudits.reduce((mx, a) => {
+    const n = parseInt(a.id.split("-")[2], 10);
+    return isNaN(n) ? mx : Math.max(mx, n);
+  }, 0);
+  return `AUDIT-${ym}-${String(maxNum + 1).padStart(4, "0")}`;
+}
+
+/* Checklist sections 2–12 ของแบบฟอร์ม — freq: "annual" (ปีละ 1 ครั้ง) หรือ "quarterly" (4 เดือนครั้ง) */
+const AUDIT_SECTIONS = [
+  {
+    id: "legal", freq: "annual", title: "2. กฎหมายและสิทธิ์ที่ดิน",
+    items: [
+      { key: "docValid", label: "มีเอกสารสิทธิ์ถูกต้อง" },
+      { key: "noIllegalExpand", label: "การขยายพื้นที่ผิดกฎหมาย (ไม่บุกรุกพื้นที่ผู้อื่น/ป่า)" },
+      { key: "noDispute", label: "ไม่มีข้อพิพาท/ข้อร้องเรียนพื้นที่" },
+      { key: "clearBoundary", label: "มีการกำหนดแนวเขตชัดเจน" },
+      { key: "landTaxPaid", label: "ภาษีที่ดิน (ชำระก่อนสิ้นเดือนมิถุนายน)" },
+      { key: "newAreaNotified", label: "พื้นที่ใหม่ (ถ้าซื้อสวนใหม่ให้แจ้ง RM)" },
+    ],
+  },
+  {
+    id: "tapping", freq: "annual", title: "3. การติดตามการกรีด ผลผลิต การขนส่ง",
+    groups: [
+      { label: "การกรีด", items: [
+        { key: "tapSystemOk", label: "ใช้ระบบกรีดเหมาะสม / ระบบกรีดแบบไหน" },
+        { key: "noBarkDamage", label: "ไม่มีบาดแผลลึกถึงเนื้อไม้" },
+        { key: "ppeTapping", label: "มี PPE งานกรีดยาง" },
+        { key: "adequateLight", label: "มีแสงสว่างเพียงพอ" },
+      ] },
+      { label: "ผลผลิต", items: [
+        { key: "noOtherRubberAsFsc", label: "เกษตรกรทราบว่าห้ามนำยางผู้อื่นมาขายเป็น FSC" },
+        { key: "memberTagUsed", label: "มีการใช้รหัสสมาชิก/Tag บนกระสอบ" },
+        { key: "sackNotShared", label: "กระสอบ FSC ไม่ถูกนำให้คนอื่นใช้" },
+        { key: "fscSeparated", label: "มีการแยก FSC และ non-FSC ชัดเจน" },
+        { key: "withinQuota", label: "ผลผลิตที่ขายไม่เกินโควตาที่กำหนด" },
+        { key: "keepSalesDocs5y", label: "เกษตรกรต้องเก็บเอกสารการขาย FSC ไว้ 5 ปี" },
+        { key: "noTheftIllegalLogging", label: "ในสวนมีการขโมยยาง, มีการลักลอบตัดไม้, มีการกระทำผิดกฎหมาย" },
+        { key: "coveredTransport", label: "รถมีการขนส่งที่มิดชิด (ผ้าใบรอง) *พรบ.รถ, ใบขับขี่" },
+      ] },
+    ],
+  },
+  {
+    id: "disaster", freq: "annual", title: "4. การภัยพิบัติ",
+    groups: [
+      { label: "1. ไฟป่า / ไฟเข้าแปลง", items: [
+        { key: "fireBreak", label: "มีแนวกันไฟ" },
+        { key: "noResidueBurning", label: "ไม่มีการเผาหญ้าหรือเศษวัสดุ" },
+        { key: "fireEquipment", label: "มีอุปกรณ์ดับไฟเบื้องต้น (ถังน้ำ จอบ คราด)" },
+        { key: "drySeasonWatch", label: "มีการเฝ้าระวังช่วงหน้าแล้ง" },
+        { key: "emergencyContact", label: "มีเบอร์แจ้งเหตุฉุกเฉิน (อบต., เทศบาล, โทร 199)" },
+      ] },
+      { label: "2. ฝนหนัก / น้ำท่วม / น้ำไหลบ่า / Buffer Zone", items: [
+        { key: "soilErosion", label: "มีดินพัง/ร่องน้ำกัดเซาะหรือไม่" },
+        { key: "chemBeforeRain", label: "ได้ใช้ปุ๋ยเคมีหรือสารเคมีก่อนฝนตกหนัก?" },
+        { key: "wasteIntoCreek", label: "มีขยะไหลลงลำห้วยหรือไม่" },
+      ] },
+      { label: "3. ดินถล่ม / ดินพังในพื้นที่ลาดชัน", items: [
+        { key: "slopeSoilFlow", label: "พื้นที่มีความชัน / มีหน้าดินไหลหรือไม่" },
+        { key: "soilCracks", label: "รอยแตกร้าวของดินหรือไม่" },
+        { key: "leaningTrees", label: "มีต้นยางเอน/รากลอยหรือไม่" },
+        { key: "erosionPrevention", label: "มีมาตรการป้องกัน เช่น หญ้าแฝก คันดิน แนวพืชหรือไม่ อย่างไร" },
+      ] },
+      { label: "4. พายุ / ลมแรง / ต้นไม้ล้ม", items: [
+        { key: "riskyTrees", label: "มีต้นไม้เสี่ยงล้มหรือไม่" },
+        { key: "fallenTreeReported", label: "หากมีต้นไม้โค่นล้ม ต้องแจ้ง RMU" },
+      ] },
+    ],
+  },
+  {
+    id: "labor", freq: "quarterly", title: "5. สิทธิแรงงานและสวัสดิการ",
+    items: [
+      { key: "noChildLabor", label: "ไม่มีแรงงานเด็ก (อายุน้อยกว่า 15 ปี)" },
+      { key: "noForcedLabor", label: "ไม่มีการบังคับแรงงาน" },
+      { key: "fairWage", label: "ได้รับค่าจ้างเป็นธรรม" },
+      { key: "maternityLeave", label: "มีสิทธิการลาคลอด / ลาเลี้ยงบุตร (42 วัน)" },
+      { key: "equalEmployment", label: "มีการจ้างทำงานที่เท่าเทียม (ให้โอกาสในการทำงาน)", extra: { key: "genderCount", label: "จำนวน ช. / ญ." } },
+      { key: "hiredTapperPaidAsAgreed", label: "หากจ้างกรีดมีการจ่ายค่าจ้างที่ตรงกับที่ตกลง", extra: { key: "tapperContact", label: "เบอร์ติดต่อคนกรีด" } },
+    ],
+  },
+  {
+    id: "chemical", freq: "quarterly", title: "6. การใช้สารเคมี",
+    requiresPhoto: true,
+    photoLabel: "📷 แนบรูปภาพจุดผสมสารเคมี (กรด) — บังคับถ่ายทุกครั้งที่มีการผสมสาร",
+    items: [
+      { key: "chemStoredSafely", label: "มีการเก็บสารเคมีอย่างปลอดภัย (มีป้ายบ่งชี้)" },
+      { key: "chemLabeled", label: "ภาชนะมีฉลากชัดเจน" },
+      { key: "noBannedChem", label: "ไม่มีสารต้องห้าม FSC" },
+      { key: "chemUsageLogged", label: "มีการทำบันทึกใช้สารเคมี" },
+      { key: "chemContainerDisposal", label: "กำจัดภาชนะสารเคมีถูกวิธี" },
+    ],
+    extraFields: [
+      { key: "chemName", label: "ชื่อสารเคมีที่ใช้" },
+      { key: "chemRate", label: "อัตราการใช้" },
+      { key: "chemDate", label: "วันที่ใช้" },
+    ],
+  },
+  {
+    id: "ppeSpray", freq: "quarterly", title: "7. สำหรับงานพ่นสารเคมี และ PPE",
+    note: "* ต้องถ่ายรูปการแต่งกายก่อนการใช้งานทุกครั้ง * ถ้ามีการทำกิจกรรมต้องมีภาพบันทึกไว้",
+    requiresPhoto: true,
+    items: [
+      { key: "maskGoggles", label: "สวมหน้ากากและแว่นตา" },
+      { key: "chemGloves", label: "สวมถุงมือสารเคมี" },
+      { key: "longSleeve", label: "สวมเสื้อแขนยาวรัดกุม" },
+      { key: "boots", label: "สวมรองเท้าบูท" },
+      { key: "ppeReady", label: "อุปกรณ์ PPE อยู่ในสภาพพร้อมใช้งาน" },
+    ],
+  },
+  {
+    id: "ppeMachine", freq: "quarterly", title: "8. เครื่องตัดหญ้าและรถไถ PPE",
+    note: "* ต้องถ่ายรูปการแต่งกายก่อนการใช้งานทุกครั้ง * ถ้ามีการทำกิจกรรมต้องมีภาพบันทึกไว้",
+    requiresPhoto: true,
+    items: [
+      { key: "trimmerReady", label: "เครื่องตัดหญ้าสภาพพร้อมใช้งาน" },
+      { key: "bladeCover", label: "มีฝาครอบใบมีด" },
+      { key: "noOilLeak", label: "ไม่มีน้ำมันรั่ว" },
+      { key: "helmetEarProtect", label: "สวมหมวกนิรภัย/ที่ครอบหู" },
+      { key: "bootsGloves", label: "สวมรองเท้าบูทและถุงมือ" },
+      { key: "tractorCheck", label: "การเช็คสภาพรถไถ / พ.ร.บ. รถไถ" },
+      { key: "oilChange", label: "การถ่ายน้ำมันเครื่อง" },
+    ],
+  },
+  {
+    id: "safety", freq: "quarterly", title: "9. ความปลอดภัยและอุบัติเหตุ",
+    items: [
+      { key: "firstAidKit", label: "มีชุดปฐมพยาบาลแบบพกพา" },
+      { key: "noAccidentThisMonth", label: "ไม่มีอุบัติเหตุในเดือนนี้" },
+      { key: "accidentLogged", label: "มีการบันทึกอุบัติเหตุ" },
+    ],
+  },
+  {
+    id: "invasive", freq: "quarterly", title: "10. พืชรุกรานสัตว์ป่า",
+    items: [
+      { key: "invasiveSpecies", label: "มีพืชรุกรานหรือไม้ต่างถิ่นหรือไม่" },
+      { key: "noHunting", label: "ไม่มีการล่าสัตว์" },
+      { key: "wildlifeSighting", label: "พบสัตว์ป่าในพื้นที่หรือไม่ / อะไรบ้าง" },
+    ],
+  },
+  {
+    id: "waste", freq: "quarterly", title: "11. การกำจัดการขยะ",
+    items: [
+      { key: "noWasteBurning", label: "ไม่มีการเผาขยะ" },
+      { key: "hazWasteSeparated", label: "แยกขยะอันตรายไปทิ้งที่ถังขยะหมู่บ้าน หรือฝากเจ้าหน้าที่มากำจัด (ขวดน้ำกรด)" },
+      { key: "chemContainerSeparate", label: "เก็บภาชนะสารเคมีแยกต่างหาก" },
+      { key: "noScatteredWaste", label: "ไม่มีขยะกระจายในสวน" },
+    ],
+  },
+  {
+    id: "grievance", freq: "quarterly", title: "12. การติดตามและข้อร้องเรียน/ข้อพิพาท",
+    items: [
+      { key: "understandsFsc", label: "เกษตรกรเข้าใจ FSC" },
+      { key: "grievanceChannel", label: "มีช่องทางร้องเรียน/ข้อพิพาท" },
+      { key: "noGrievanceThisMonth", label: "ไม่มีข้อร้องเรียนในเดือนนี้" },
+      { key: "ncrCarFollowup", label: "มีการติดตาม NCR/CAR เดิม" },
+      { key: "hasPhotoEvidence", label: "มีรูปถ่ายหลักฐานการตรวจ" },
+    ],
+  },
+];
+
+const AUDIT_EXPENSE_ITEMS = [
+  { key: "tappingKnives", label: "จำนวนมีดกรีด" },
+  { key: "rawMaterialRounds", label: "รอบขายวัตถุดิบ" },
+  { key: "transportFuel", label: "ค่าน้ำมันขนส่ง" },
+  { key: "acidCost", label: "ค่าน้ำกรด" },
+  { key: "fertilizing", label: "การใส่ปุ๋ย" },
+  { key: "brushCutterMowing", label: "การตัดหญ้าสายสะพายข้าง" },
+  { key: "tractorMowing", label: "การตัดหญ้ารถไถ" },
+  { key: "maintenanceCost", label: "ค่าซ่อมบำรุงอุปกรณ์" },
+  { key: "accidentCost", label: "การเกิดอุบัติเหตุ" },
+  { key: "otherCost", label: "ค่าใช้จ่ายอื่นๆ (ถ้วย ลวด ไฟฉาย มีด ที่ลับมีด ลิ้น ฯลฯ)" },
+];
+
+/* รวมทุก item (รวมใน groups) ของทุก section เป็น flat list — ใช้คำนวณสรุปผ่าน/ไม่ผ่าน */
+function auditAllItems() {
+  const out = [];
+  AUDIT_SECTIONS.forEach(sec => {
+    (sec.items || []).forEach(it => out.push(it));
+    (sec.groups || []).forEach(g => (g.items || []).forEach(it => out.push(it)));
+  });
+  return out;
+}
+function computeAuditSummary(audit) {
+  const items = auditAllItems();
+  let pass = 0, fail = 0, na = 0, blank = 0;
+  items.forEach(it => {
+    const st = audit.checklist && audit.checklist[it.key] ? audit.checklist[it.key].status : "";
+    if (st === "pass") pass++;
+    else if (st === "fail") fail++;
+    else if (st === "na") na++;
+    else blank++;
+  });
+  return { pass, fail, na, blank, total: items.length, hasFail: fail > 0 };
+}
+
 function getQuotaFor(rec) {
   const store = loadQuotas();
   const override = store[rec.memberId] || store[rec.plot] || {};
@@ -411,6 +624,164 @@ function fmtNum(n, digits) {
 function safe(s) { return (s == null || s === "") ? "-" : s; }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
+/* ── Photo capture with auto date/time/GPS tagging ──
+   ใช้ร่วมกันหลาย feature (audit, lots) — ถ่าย/เลือกรูปแล้วแนบ วัน/เวลา/พิกัด GPS อัตโนมัติ
+   (ตาม WI: "ระบุ วัน/เวลา/พิกัด GPS ที่ถ่าย อัตโนมัติ") ถ้าเปิด location ไม่ได้ ก็ยังบันทึกรูปได้ตามปกติ */
+function capturePhotoWithGeo(file, callback) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const photo = { name: file.name, data: reader.result, capturedAt: new Date().toISOString(), lat: null, lng: null };
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => { photo.lat = pos.coords.latitude; photo.lng = pos.coords.longitude; callback(photo); },
+        () => callback(photo),
+        { timeout: 5000, maximumAge: 60000 },
+      );
+    } else {
+      callback(photo);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+function fmtPhotoMeta(photo) {
+  if (!photo) return "";
+  const d = new Date(photo.capturedAt);
+  const dateStr = isNaN(d) ? "" : d.toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" });
+  const gps = (photo.lat != null && photo.lng != null) ? `${photo.lat.toFixed(5)}, ${photo.lng.toFixed(5)}` : "ไม่มีพิกัด GPS";
+  return `${dateStr} · ${gps}`;
+}
+/* ปุ่มถ่าย/แนบรูป 1 ตำแหน่ง (single-slot) — แสดง ✅ เมื่อมีรูปแล้ว, คลิกซ้ำเพื่อถ่ายใหม่ (แทนที่รูปเดิม) */
+function buildPhotoPickerButton(label, getPhoto, onCapture) {
+  const input = el("input", { type: "file", accept: "image/*", capture: "environment", style: "display:none" });
+  const btn = el("button", {
+    type: "button",
+    class: "btn btn-small photo-pick-btn " + (getPhoto() ? "photo-pick-done" : "btn-secondary"),
+  }, getPhoto() ? `✅ ${label}` : `📷 ${label}`);
+  const metaEl = el("span", { class: "photo-pick-meta muted" }, getPhoto() ? fmtPhotoMeta(getPhoto()) : "");
+  const thumbEl = el("img", {
+    class: "photo-pick-thumb",
+    style: getPhoto() ? "" : "display:none",
+    src: getPhoto() ? getPhoto().data : "",
+    alt: label,
+  });
+  thumbEl.onclick = () => { if (thumbEl.src) window.open(thumbEl.src, "_blank"); };
+  function handleFile(f) {
+    if (!f) return;
+    capturePhotoWithGeo(f, photo => {
+      onCapture(photo);
+      btn.textContent = `✅ ${label}`;
+      btn.classList.add("photo-pick-done");
+      btn.classList.remove("btn-secondary");
+      metaEl.textContent = fmtPhotoMeta(photo);
+      thumbEl.src = photo.data;
+      thumbEl.style.display = "";
+    });
+  }
+  btn.onclick = () => openCameraCapture(input, handleFile);
+  input.addEventListener("change", () => {
+    handleFile(input.files[0]);
+    input.value = "";
+  });
+  return el("span", { class: "photo-pick-wrap" }, thumbEl, btn, metaEl, input);
+}
+
+/* ── กล้องถ่ายรูปในหน้าเว็บ — เปิดกล้องหลังของอุปกรณ์โดยตรง ความละเอียดสูง คุณภาพ JPEG สูง ──
+   ใช้ getUserMedia แทนการพึ่ง <input capture> เพียงอย่างเดียว เพื่อควบคุมความละเอียด/คุณภาพได้
+   ถ้าเปิดกล้องไม่ได้ (permission ปฏิเสธ, ไม่รองรับ, ไม่ใช่ secure context ฯลฯ) fallback ไปที่
+   input[type=file capture=environment] เดิม ซึ่ง OS จะเปิดแอปกล้องให้แทน */
+function openCameraCapture(fallbackInput, onFile) {
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || !window.isSecureContext) {
+    fallbackInput.click();
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+    audio: false,
+  }).then(stream => {
+    showCameraCaptureModal(stream, fallbackInput, onFile);
+  }).catch(() => {
+    fallbackInput.click();
+  });
+}
+function showCameraCaptureModal(stream, fallbackInput, onFile) {
+  const video = el("video", { autoplay: true, playsinline: true, muted: true, class: "camera-modal-video" });
+  video.srcObject = stream;
+  const previewImg = el("img", { class: "camera-modal-preview", style: "display:none" });
+  const hint = el("div", { class: "camera-modal-hint" }, "จัดกล้องให้อยู่ในกรอบ แล้วกดถ่ายรูป — ความละเอียดสูงสุดที่กล้องรองรับ");
+
+  const shutterBtn = el("button", { type: "button", class: "btn btn-primary camera-shutter-btn" }, "📸 ถ่ายรูป");
+  const cancelBtn = el("button", { type: "button", class: "btn btn-secondary camera-cancel-btn" }, "✕ ยกเลิก");
+  const confirmBtn = el("button", { type: "button", class: "btn btn-primary camera-confirm-btn", style: "display:none" }, "✅ ใช้รูปนี้");
+  const retakeBtn = el("button", { type: "button", class: "btn btn-secondary camera-retake-btn", style: "display:none" }, "🔄 ถ่ายใหม่");
+
+  const overlay = el("div", { class: "camera-modal-overlay" },
+    el("div", { class: "camera-modal-box" },
+      video, previewImg, hint,
+      el("div", { class: "camera-modal-controls" }, shutterBtn, cancelBtn, confirmBtn, retakeBtn),
+    ),
+  );
+
+  let capturedBlob = null;
+  function stopStream() { stream.getTracks().forEach(t => t.stop()); }
+  function close() {
+    stopStream();
+    if (previewImg.src) URL.revokeObjectURL(previewImg.src);
+    overlay.remove();
+  }
+  cancelBtn.onclick = close;
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+
+  // ── ถ่ายรูป → หยุดที่หน้าพรีวิว ให้ดูภาพก่อนตัดสินใจใช้รูปนี้หรือถ่ายใหม่ ──
+  shutterBtn.onclick = () => {
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings ? track.getSettings() : {};
+    const canvas = document.createElement("canvas");
+    canvas.width = settings.width || video.videoWidth || 1920;
+    canvas.height = settings.height || video.videoHeight || 1080;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      if (!blob) { close(); fallbackInput.click(); return; }
+      capturedBlob = blob;
+      previewImg.src = URL.createObjectURL(blob);
+      video.style.display = "none";
+      previewImg.style.display = "block";
+      hint.textContent = "ตรวจสอบความคมชัดของภาพ แล้วกด \"ใช้รูปนี้\" หรือ \"ถ่ายใหม่\"";
+      shutterBtn.style.display = "none";
+      cancelBtn.style.display = "none";
+      confirmBtn.style.display = "";
+      retakeBtn.style.display = "";
+    }, "image/jpeg", 0.95); // คุณภาพสูง ลด artifact จากการบีบอัด
+  };
+
+  confirmBtn.onclick = () => {
+    const blob = capturedBlob;
+    close();
+    onFile(new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }));
+  };
+  retakeBtn.onclick = () => {
+    URL.revokeObjectURL(previewImg.src);
+    capturedBlob = null;
+    previewImg.style.display = "none";
+    previewImg.removeAttribute("src");
+    video.style.display = "";
+    hint.textContent = "จัดกล้องให้อยู่ในกรอบ แล้วกดถ่ายรูป — ความละเอียดสูงสุดที่กล้องรองรับ";
+    shutterBtn.style.display = "";
+    cancelBtn.style.display = "";
+    confirmBtn.style.display = "none";
+    retakeBtn.style.display = "none";
+  };
+
+  document.body.append(overlay);
+}
+/* แสดงรูปที่บันทึกไว้แล้ว (read-only) เป็น thumbnail คลิกเปิดรูปเต็มในแท็บใหม่ */
+function renderPhotoThumbLink(photo, label) {
+  if (!photo) return el("div", { class: "muted lot-photo-empty" }, `— ไม่มีรูป${label ? " " + label : ""} —`);
+  return el("a", { href: photo.data, target: "_blank", class: "lot-photo-thumb-link", title: fmtPhotoMeta(photo) },
+    el("img", { src: photo.data, alt: label || photo.name, class: "lot-photo-thumb-img" }),
+    el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, fmtPhotoMeta(photo))),
+  );
+}
+
 /* Convert Excel serial date → readable date if it looks like one */
 function fmtDate(v) {
   if (!v) return "-";
@@ -440,10 +811,19 @@ const ROUTES = {
   lots: renderLots,
   "lots/new": renderLotForm,
   lot: renderLotDetail,
+  audits: renderAudits,
+  "audits/new": renderAuditForm,
   setup: renderSetup,
   login: renderLogin,
   users: renderUsersAdmin,
   compliance: renderCompliance,
+};
+
+// Compound routes (route with a literal second path segment, e.g. "lots/new")
+// each need their own template key since they don't match the plain route name.
+const COMPOUND_ROUTE_TPL = {
+  "lots/new": "lot-new",
+  "audits/new": "audits-new",
 };
 
 function router() {
@@ -466,7 +846,7 @@ function router() {
   if (segments.length > 1 && ROUTES[`${segments[0]}/${segments[1]}`]) {
     route = `${segments[0]}/${segments[1]}`;
     params = segments.slice(2);
-    tplKey = "lot-new";
+    tplKey = COMPOUND_ROUTE_TPL[route] || route.replace("/", "-");
   } else {
     route = segments[0];
     params = segments.slice(1);
@@ -1195,6 +1575,10 @@ function renderFarmerDetail(params) {
   const cBtn = $("#complianceBtn");
   if (cBtn) cBtn.onclick = () => {
     location.hash = `#/compliance/${encodeURIComponent(m.memberId || m.plot)}`;
+  };
+  const aBtn = $("#auditBtn");
+  if (aBtn) aBtn.onclick = () => {
+    location.hash = `#/audits/new/${encodeURIComponent(m.memberId || m.plot)}`;
   };
 }
 
@@ -3189,7 +3573,8 @@ function calcLotTotals(lot) {
   const drcPct = (Number(lot.drcPercent) || 0) / 100;
   const totalWeightKg = (lot.sources || []).reduce((s, x) => s + (Number(x.weightKg) || 0), 0);
   const totalDrcKg = totalWeightKg * drcPct;
-  return { totalWeightKg, totalDrcKg, plotCount: (lot.sources || []).length };
+  const totalAmount = (lot.sources || []).reduce((s, x) => s + (Number(x.weightKg) || 0) * (Number(x.pricePerKg) || 0), 0);
+  return { totalWeightKg, totalDrcKg, totalAmount, plotCount: (lot.sources || []).length };
 }
 
 /* ── Lots list ── */
@@ -3335,7 +3720,27 @@ function renderLotForm(params) {
     ["hub", "buyer", "productForm", "fscClaim", "drcPercent", "transferDocNo", "status", "note"].forEach(k => {
       if (form.elements[k] != null && editing[k] != null) form.elements[k].value = editing[k];
     });
+    if (editing.truck) {
+      ["truckType", "truckPlate", "truckDriverName", "truckContamCheck"].forEach(k => {
+        const srcKey = k.replace("truck", "").replace(/^./, c => c.toLowerCase());
+        if (form.elements[k] != null && editing.truck[srcKey] != null) form.elements[k].value = editing.truck[srcKey];
+      });
+    }
   }
+
+  // ── 1. ตรวจเช็ครถขนส่ง — รูปรถ 3 จุด (หน้ารถ/ข้างรถ/บนกระบะรถ) ──
+  const truckPhotos = (editing && editing.truck && editing.truck.photos) ? { ...editing.truck.photos } : { front: null, side: null, bed: null };
+  const truckPhotoWrap = $("#truckPhotoButtons");
+  truckPhotoWrap.innerHTML = "";
+  [["front", "หน้ารถ"], ["side", "ข้างรถ"], ["bed", "บนกระบะรถ"]].forEach(([key, label]) => {
+    truckPhotoWrap.append(buildPhotoPickerButton(label, () => truckPhotos[key], photo => { truckPhotos[key] = photo; }));
+  });
+
+  // ── 6. ใบเสร็จรับเงิน ──
+  let receiptPhoto = (editing && editing.receiptPhoto) || null;
+  const receiptWrap = $("#receiptPhotoButton");
+  receiptWrap.innerHTML = "";
+  receiptWrap.append(buildPhotoPickerButton("แนบรูปใบเสร็จ", () => receiptPhoto, photo => { receiptPhoto = photo; }));
 
   // ── Source plots manager ──
   const allRecs = getAllRecords();
@@ -3345,26 +3750,42 @@ function renderLotForm(params) {
     const tbody = $("#srcPlotRows");
     tbody.innerHTML = "";
     const drcPct = (Number(form.elements.drcPercent.value) || 65) / 100;
-    let totalW = 0, totalD = 0;
+    let totalW = 0, totalD = 0, totalAmt = 0;
     sources.forEach((s, i) => {
       const weight = Number(s.weightKg) || 0;
+      const price = Number(s.pricePerKg) || 0;
+      const amount = weight * price;
       const dry = weight * drcPct;
-      totalW += weight; totalD += dry;
+      totalW += weight; totalD += dry; totalAmt += amount;
       const tr = el("tr", null,
         el("td", null, el("b", null, safe(s.fmu)), el("br"), el("span", { class: "muted" }, safe(s.plot))),
-        el("td", null, safe(s.nameTh)),
+        el("td", null, safe(s.nameTh), el("br"), el("input", {
+          type: "text", value: s.tapperName || "", placeholder: "ชื่อคนกรีด",
+          style: "width:130px", oninput: e => { s.tapperName = e.target.value; },
+        })),
         el("td", null, el("input", {
           type: "number", step: "0.01", value: s.weightKg || "",
-          style: "width:100px",
+          style: "width:90px",
           oninput: e => { s.weightKg = e.target.value; renderSources(); },
         })),
         el("td", null, el("input", {
+          type: "number", step: "0.01", value: s.pricePerKg || "",
+          style: "width:80px",
+          oninput: e => { s.pricePerKg = e.target.value; renderSources(); },
+        })),
+        el("td", null, fmtNum(amount, 2)),
+        el("td", null, el("input", {
           type: "text", value: s.weighSlipNo || "",
           placeholder: "เลขใบชั่ง/รอบ",
-          style: "width:140px",
+          style: "width:120px",
           oninput: e => { s.weighSlipNo = e.target.value; },
         })),
         el("td", null, fmtNum(dry, 2)),
+        el("td", null,
+          buildPhotoPickerButton("ตาชั่ง", () => s.scalePhoto, photo => { s.scalePhoto = photo; }),
+          el("br"),
+          buildPhotoPickerButton("ยาง", () => s.rubberPhoto, photo => { s.rubberPhoto = photo; }),
+        ),
         el("td", null, el("button", {
           type: "button", class: "btn btn-small btn-secondary",
           onclick: () => { sources.splice(i, 1); renderSources(); },
@@ -3373,6 +3794,7 @@ function renderLotForm(params) {
       tbody.append(tr);
     });
     $("#srcTotalWeight").textContent = fmtNum(totalW, 2);
+    $("#srcTotalAmount").textContent = fmtNum(totalAmt, 2);
     $("#srcTotalDry").textContent = fmtNum(totalD, 2);
     $("#srcPlotCount").textContent = `${sources.length} แปลง`;
     $("#srcEmptyMsg").style.display = sources.length ? "none" : "";
@@ -3382,10 +3804,10 @@ function renderLotForm(params) {
   // Recalc dry when DRC % changes
   form.elements.drcPercent.addEventListener("input", renderSources);
 
-  // ── Plot search & add ──
+  // ── Plot search & add ── รายการผลค้นหาเปิดค้างไว้ได้ กดเพิ่มได้หลายแปลงต่อเนื่องโดยไม่ต้องพิมพ์ค้นหาใหม่
   const sInput = $("#srcPlotSearch");
   const sugBox = $("#srcPlotSuggest");
-  sInput.addEventListener("input", () => {
+  function renderSuggestions() {
     const q = sInput.value.trim().toLowerCase();
     sugBox.innerHTML = "";
     if (!q) { sugBox.style.display = "none"; return; }
@@ -3412,26 +3834,33 @@ function renderLotForm(params) {
           type: "button", class: "btn btn-small btn-primary",
           onclick: e => {
             e.preventDefault();
+            const q2 = getQuotaFor(m);
             sources.push({
               memberId: m.memberId || "",
               plot: m.plot || "",
               fmu: m.fmu || "",
               nameTh: m.nameTh || "",
               hub: m.hub || "",
+              tapperName: "",
               weightKg: "",
+              pricePerKg: q2.pricePerKg || "",
               weighSlipNo: "",
               fscArea: m.fscArea || 0,
+              scalePhoto: null,
+              rubberPhoto: null,
             });
             renderSources();
-            sInput.value = "";
-            sugBox.style.display = "none";
-            sInput.focus();
+            // รอ tick ถัดไปก่อนสร้างรายการใหม่ — ถ้ารื้อ DOM ทันทีในตัว handler นี้ ปุ่มที่เพิ่งคลิกจะหลุดจาก
+            // DOM ก่อน document click-outside listener (bubble phase) เช็คว่าคลิกอยู่ใน sugBox หรือไม่
+            // ทำให้กล่องผลค้นหาปิดไปเองทั้งที่ยังไม่ได้คลิกออกไปข้างนอกจริง ๆ
+            setTimeout(renderSuggestions, 0); // เปิดรายการค้างไว้ ให้กดแปลงถัดไปต่อได้เลยโดยไม่ต้องพิมพ์ค้นหาใหม่
           },
         }, "➕ เพิ่ม"),
       );
       sugBox.append(row);
     });
-  });
+  }
+  sInput.addEventListener("input", renderSuggestions);
   document.addEventListener("click", e => {
     if (!sInput.contains(e.target) && !sugBox.contains(e.target)) sugBox.style.display = "none";
   });
@@ -3455,10 +3884,22 @@ function renderLotForm(params) {
       transferDocNo: data.transferDocNo || "",
       status: data.status || "Open",
       note: data.note || "",
+      truck: {
+        type: data.truckType || "",
+        plate: data.truckPlate || "",
+        driverName: data.truckDriverName || "",
+        contamCheck: data.truckContamCheck || "",
+        photos: truckPhotos,
+      },
+      receiptPhoto,
+      closure: (editing && editing.closure) || { closed: false, photo: null, closedAt: null },
       sources: sources.map(s => ({
         memberId: s.memberId, plot: s.plot, fmu: s.fmu, nameTh: s.nameTh, hub: s.hub,
-        weightKg: Number(s.weightKg) || 0, weighSlipNo: s.weighSlipNo || "",
+        tapperName: s.tapperName || "",
+        weightKg: Number(s.weightKg) || 0, pricePerKg: Number(s.pricePerKg) || 0,
+        weighSlipNo: s.weighSlipNo || "",
         fscArea: s.fscArea || 0,
+        scalePhoto: s.scalePhoto || null, rubberPhoto: s.rubberPhoto || null,
       })),
       createdAt: (editing && editing.createdAt) || Date.now(),
       updatedAt: Date.now(),
@@ -3498,6 +3939,7 @@ function renderLotDetail(params) {
   [
     { icon: "⚖️", label: "น้ำหนักรวม (รับซื้อ)", value: fmtNum(totals.totalWeightKg, 2) + " กก.", cls: "qt-orange" },
     { icon: "💧", label: `ยางแห้ง DRC ${lot.drcPercent}%`, value: fmtNum(totals.totalDrcKg, 2) + " กก.", cls: "qt-green" },
+    { icon: "💰", label: "ยอดเงินรวม", value: fmtNum(totals.totalAmount, 2) + " ฿", cls: "qt-yellow" },
     { icon: "🌱", label: "แปลงต้นทาง", value: totals.plotCount + " แปลง", cls: "qt-blue" },
     { icon: "📍", label: "FMU ที่เกี่ยวข้อง", value: fmus.size + " FMU", cls: "qt-teal" },
     { icon: "✅", label: "พื้นที่ FSC รวม", value: fmtNum(fscAreaSum, 2) + " ไร่", cls: "qt-purple" },
@@ -3509,27 +3951,64 @@ function renderLotDetail(params) {
     ),
   )));
 
-  // Source plots table
+  // ── 1. ตรวจเช็ครถขนส่ง ──
+  const truck = lot.truck || {};
+  const truckKv = $("#lotTruckKv");
+  truckKv.innerHTML = "";
+  [
+    ["ประเภทรถ", truck.type],
+    ["ทะเบียนรถ", truck.plate],
+    ["ชื่อผู้ขับขี่", truck.driverName],
+    ["ไม่มีสิ่งปลอมปนบนรถ", truck.contamCheck === "pass" ? "✅ ผ่าน" : truck.contamCheck === "fail" ? "❌ ไม่ผ่าน — พบสิ่งปลอมปน" : "-"],
+  ].forEach(([k, v]) => truckKv.append(el("dt", null, k), el("dd", null, safe(v))));
+  const truckPhotosEl = $("#lotTruckPhotos");
+  truckPhotosEl.innerHTML = "";
+  [["front", "หน้ารถ"], ["side", "ข้างรถ"], ["bed", "บนกระบะรถ"]].forEach(([key, label]) => {
+    truckPhotosEl.append(renderPhotoThumbLink(truck.photos && truck.photos[key], label));
+  });
+
+  // ── ใบเสร็จรับเงิน ──
+  const receiptEl = $("#lotReceiptPhoto");
+  receiptEl.innerHTML = "";
+  receiptEl.append(renderPhotoThumbLink(lot.receiptPhoto, "ใบเสร็จรับเงิน"));
+
+  // Source plots table — พร้อมเช็คโควต้าต่อรอบของเกษตรกรแต่ละราย
   const tbody = $("#lotSourceTable tbody");
   tbody.innerHTML = "";
+  let anyOverQuota = false;
   lot.sources.forEach((s, i) => {
     const dry = (Number(s.weightKg) || 0) * (Number(lot.drcPercent) / 100);
     const pct = totals.totalWeightKg ? (Number(s.weightKg) / totals.totalWeightKg) * 100 : 0;
+    const amount = (Number(s.weightKg) || 0) * (Number(s.pricePerKg) || 0);
     const r = allRecs.find(x => x.plot === s.plot || x.memberId === s.memberId);
-    const tr = el("tr", null,
+    const quota = r ? getQuotaFor(r) : null;
+    const deliveryQuota = quota ? Number(quota.deliveryPerRound) || 0 : 0;
+    const overQuota = deliveryQuota > 0 && (Number(s.weightKg) || 0) > deliveryQuota;
+    if (overQuota) anyOverQuota = true;
+    const tr = el("tr", { class: overQuota ? "row-over-quota" : "" },
       el("td", null, String(i + 1)),
       el("td", null, el("b", null, safe(s.fmu)), el("br"), el("span", { class: "muted" }, safe(s.plot))),
-      el("td", null, safe(s.nameTh)),
+      el("td", null, safe(s.nameTh), s.tapperName ? el("div", { class: "muted" }, "คนกรีด: " + s.tapperName) : null),
       el("td", null, safe(s.hub || (r && r.hub))),
       el("td", null, fmtNum(s.weightKg, 2)),
       el("td", null, fmtNum(pct, 1) + "%"),
+      el("td", null, fmtNum(s.pricePerKg, 2)),
+      el("td", null, fmtNum(amount, 2)),
       el("td", null, fmtNum(dry, 2)),
       el("td", null, safe(s.weighSlipNo)),
       el("td", null, s.fscArea > 0 ? el("span", { class: "tr-badge tr-badge-green" }, "✓") : el("span", { class: "tr-badge tr-badge-gray" }, "-")),
+      el("td", { class: "lot-photo-cell" },
+        renderPhotoThumbLink(s.scalePhoto, "ตาชั่ง"),
+        renderPhotoThumbLink(s.rubberPhoto, "ยาง"),
+      ),
+      el("td", null, deliveryQuota
+        ? el("span", { class: "tr-badge " + (overQuota ? "tr-badge-red" : "tr-badge-green") }, overQuota ? `⚠️ เกิน (${fmtNum(deliveryQuota,0)})` : `ปกติ (${fmtNum(deliveryQuota,0)})`)
+        : el("span", { class: "muted" }, "-")),
       el("td", null, el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(s.memberId || s.plot)}` }, "ดู →")),
     );
     tbody.append(tr);
   });
+  $("#lotQuotaWarnNote").style.display = anyOverQuota ? "" : "none";
 
   // Detail KV
   const kv = $("#lotDetailKv");
@@ -3584,13 +4063,553 @@ function renderLotDetail(params) {
   }
   setTimeout(() => map.invalidateSize(), 200);
 
+  // ── 3. ปิดรถ (Truck closure) — ต้องแนบรูปใบปิดรถจากระบบ POP ก่อนปิดได้ ──
+  function renderClosurePanel() {
+    const panel = $("#lotClosurePanel");
+    panel.innerHTML = "";
+    const closure = lot.closure || { closed: false, photo: null, closedAt: null };
+    if (closure.closed) {
+      const kv = el("dl", { class: "kv" },
+        el("dt", null, "สถานะ"), el("dd", null, el("span", { class: "tr-badge tr-badge-green" }, "🔒 ปิดรถแล้ว")),
+        el("dt", null, "ปิดเมื่อ"), el("dd", null, closure.closedAt ? new Date(closure.closedAt).toLocaleString("th-TH") : "-"),
+      );
+      panel.append(kv, renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
+    } else {
+      let pendingPhoto = closure.photo || null;
+      const photoBtn = buildPhotoPickerButton("แนบรูปใบปิดรถ (POP)", () => pendingPhoto, photo => { pendingPhoto = photo; });
+      const closeBtn = el("button", { type: "button", class: "btn btn-primary" }, "🔒 ยืนยันปิดรถ");
+      closeBtn.onclick = () => {
+        if (!pendingPhoto) { alert("⚠️ กรุณาแนบรูปใบปิดรถจากระบบ POP ก่อนปิดรถ"); return; }
+        if (!confirm("ยืนยันปิดรถ? หลังปิดแล้วจะแก้ไขแปลงต้นทางไม่ได้อีก")) return;
+        lot.closure = { closed: true, photo: pendingPhoto, closedAt: Date.now() };
+        lot.status = "Closed";
+        upsertLot(lot);
+        renderClosurePanel();
+        $("#lotDetailStatus").textContent = lot.status;
+      };
+      panel.append(
+        el("p", { class: "muted" }, "เลือกข้อมูลเกษตรกรที่บันทึกในรถคันเดียวกัน (แปลงต้นทางด้านบน) ระบบคำนวณน้ำหนักรวมให้อัตโนมัติ — แนบรูปใบปิดรถจากระบบ POP (มีตราประทับ FSC) เพื่อใช้ตรวจสอบย้อนกลับ ก่อนกดยืนยันปิดรถ"),
+        photoBtn, closeBtn,
+      );
+    }
+  }
+  renderClosurePanel();
+
   // Actions
   $("#lotEditBtn").onclick = () => { location.hash = `#/lots/new/${encodeURIComponent(lot.lotId)}`; };
   $("#lotPrintBtn").onclick = () => window.print();
+  $("#lotKmlBtn").onclick = () => {
+    const kml = buildLotSourceKML(lot);
+    const blob = new Blob([kml], { type: "application/vnd.google-earth.kml+xml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${lot.lotId}-traceability.kml`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 100);
+  };
   $("#lotDeleteBtn").onclick = () => {
     if (!confirm(`ลบล็อต ${lot.lotId}?\nการกระทำนี้ย้อนกลับไม่ได้`)) return;
     deleteLot(lot.lotId);
     location.hash = "#/lots";
+  };
+}
+
+/* ── 5. สร้างการตรวจสอบแหล่งที่มา — รวม polygon ของแปลงต้นทางในล็อตเป็นไฟล์ KML เดียว ── */
+function buildLotSourceKML(lot) {
+  const placemarks = [];
+  lot.sources.forEach(s => {
+    let coords = null;
+    const p = PRODUCTIVE.find(p => p.name === s.plot);
+    if (p) coords = p.coordinates;
+    else {
+      const lt = LANDTITLES.find(p => p.name && p.name.split(",").map(x => x.trim()).includes(s.plot));
+      if (lt) coords = lt.coordinates;
+    }
+    if (!coords || coords.length < 3) return;
+    const coordStr = coords.map(c => `${c[0]},${c[1]},0`).join(" ");
+    const name = `${s.fmu} · ${s.plot}`.replace(/[<>&]/g, "");
+    const desc = `${(s.nameTh || "").replace(/[<>&]/g, "")} — น้ำหนัก ${fmtNum(s.weightKg, 2)} กก. (ล็อต ${lot.lotId})`;
+    placemarks.push(`    <Placemark>
+      <name>${name}</name>
+      <description>${desc}</description>
+      <Polygon>
+        <outerBoundaryIs><LinearRing><coordinates>${coordStr}</coordinates></LinearRing></outerBoundaryIs>
+      </Polygon>
+    </Placemark>`);
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${lot.lotId} — แหล่งที่มา (Traceability)</name>
+${placemarks.join("\n")}
+  </Document>
+</kml>
+`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ✅ FIELD AUDIT — ตรวจติดตามรายแปลง (RM field monitoring)
+   อ้างอิงหัวข้อจาก FO-WI-QP.PC.4-01-030 Checklist การตรวจติดตามเกษตรกรสมาชิก
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Audit list ── */
+function renderAudits() {
+  const tbody = $("#auditsTable tbody");
+  const search = $("#auditSearch");
+  const filterFMU = $("#auditFilterFMU");
+  const filterRound = $("#auditFilterRound");
+  const filterResult = $("#auditFilterResult");
+
+  function refresh() {
+    const audits = loadAudits();
+    $("#auditCount").textContent = `${audits.length} รายการ`;
+
+    const fmus = [...new Set(audits.map(a => a.fmu).filter(Boolean))].sort();
+    filterFMU.innerHTML = `<option value="">ทุก FMU</option>`;
+    fmus.forEach(f => filterFMU.append(el("option", { value: f }, f)));
+
+    // Stat tiles
+    const withFail = audits.filter(a => computeAuditSummary(a).hasFail).length;
+    const thisMonth = audits.filter(a => (a.auditDate || "").slice(0, 7) === new Date().toISOString().slice(0, 7)).length;
+    const plotsAudited = new Set(audits.map(a => a.plotKey)).size;
+    const stats = $("#auditStats");
+    if (stats) {
+      stats.innerHTML = "";
+      [
+        { icon: "✅", label: "บันทึกการตรวจทั้งหมด", value: audits.length + " รายการ", cls: "qt-green" },
+        { icon: "🌱", label: "แปลงที่เคยตรวจ", value: plotsAudited + " แปลง", cls: "qt-teal" },
+        { icon: "📅", label: "ตรวจในเดือนนี้", value: thisMonth + " รายการ", cls: "qt-blue" },
+        { icon: "⚠️", label: "พบข้อไม่ผ่าน (ต้องติดตาม)", value: withFail + " รายการ", cls: "qt-orange" },
+      ].forEach(t => stats.append(el("div", { class: "quota-tile " + t.cls },
+        el("div", { class: "qt-icon" }, t.icon),
+        el("div", { class: "qt-body" },
+          el("div", { class: "qt-label" }, t.label),
+          el("div", { class: "qt-value" }, t.value),
+        ),
+      )));
+    }
+
+    const q = (search.value || "").trim().toLowerCase();
+    const fF = filterFMU.value, fR = filterRound.value, fRes = filterResult.value;
+    tbody.innerHTML = "";
+    let shown = 0;
+    audits.forEach(a => {
+      if (fF && a.fmu !== fF) return;
+      if (fR && String(a.auditRound) !== fR) return;
+      const summary = computeAuditSummary(a);
+      if (fRes === "fail" && !summary.hasFail) return;
+      if (fRes === "pass" && summary.hasFail) return;
+      if (q) {
+        const blob = `${a.fmu} ${a.plot} ${a.ownerName} ${a.rmName}`.toLowerCase();
+        if (!blob.includes(q)) return;
+      }
+      shown++;
+      const resultBadge = summary.hasFail
+        ? el("span", { class: "tr-badge tr-badge-red" }, `❌ ไม่ผ่าน ${summary.fail} ข้อ`)
+        : el("span", { class: "tr-badge tr-badge-green" }, `✅ ผ่าน ${summary.pass}/${summary.total - summary.na}`);
+      const tr = el("tr", { onclick: () => location.hash = `#/audits/new/${encodeURIComponent(a.id)}` },
+        el("td", null, a.auditDate || "-"),
+        el("td", null, el("b", null, safe(a.fmu)), el("br"), el("span", { class: "muted" }, safe(a.plot))),
+        el("td", null, safe(a.ownerName)),
+        el("td", null, `ครั้งที่ ${safe(a.auditRound)}`),
+        el("td", null, safe(a.rmName)),
+        el("td", null, resultBadge),
+        el("td", null, el("button", {
+          class: "btn btn-small btn-secondary",
+          onclick: e => {
+            e.stopPropagation();
+            if (!confirm(`ลบบันทึกการตรวจ ${a.id}?\nการกระทำนี้ย้อนกลับไม่ได้`)) return;
+            deleteAudit(a.id);
+            refresh();
+          },
+        }, "🗑️")),
+      );
+      tbody.append(tr);
+    });
+    $("#auditEmptyMsg").style.display = shown ? "none" : "";
+  }
+  refresh();
+  search.addEventListener("input", refresh);
+  filterFMU.addEventListener("change", refresh);
+  filterRound.addEventListener("change", refresh);
+  filterResult.addEventListener("change", refresh);
+}
+
+/* ── Build one checklist item row: label + ผ่าน/ไม่ผ่าน/N/A radios + note ── */
+function buildAuditItemRow(item, saved) {
+  const val = saved || { status: "", note: "" };
+  const name = `chk_${item.key}`;
+  const row = el("div", { class: "audit-item-row" },
+    el("div", { class: "audit-item-label" }, item.label),
+    el("div", { class: "audit-item-radios" },
+      ...["pass", "fail", "na"].map(st => {
+        const cls = st === "pass" ? "audit-radio-pass" : st === "fail" ? "audit-radio-fail" : "audit-radio-na";
+        const txt = st === "pass" ? "ผ่าน" : st === "fail" ? "ไม่ผ่าน" : "N/A";
+        const inputAttrs = { type: "radio", name, value: st };
+        if (val.status === st) inputAttrs.checked = true;
+        return el("label", { class: "audit-radio " + cls },
+          el("input", inputAttrs),
+          txt,
+        );
+      }),
+    ),
+    el("input", {
+      type: "text", class: "audit-item-note", name: `note_${item.key}`,
+      value: val.note || "", placeholder: "หมายเหตุ / แนวทางแก้ไข",
+    }),
+  );
+  if (item.extra) {
+    row.append(el("input", {
+      type: "text", class: "audit-item-extra", name: `extra_${item.extra.key}`,
+      value: (saved && saved.extraValue) || "", placeholder: item.extra.label,
+    }));
+  }
+  return row;
+}
+
+/* ── Build all checklist sections (2–12) into a container ── */
+/* ── Photo evidence widget — เฉพาะ section ที่ต้องถ่ายรูปทุกครั้งที่ทำกิจกรรม (เช่น PPE พ่นสารเคมี/ตัดหญ้า)
+   photos = { [sectionId]: [{name, data(base64)}] } — เก็บสดใน closure ของ renderAuditForm ไม่ต้องอ่านจาก DOM ตอน submit */
+function buildAuditPhotoWidget(sectionId, photos, label) {
+  photos[sectionId] = photos[sectionId] || [];
+  const gallery = el("div", { class: "audit-photo-gallery" });
+  const fileInput = el("input", { type: "file", accept: "image/*", capture: "environment", multiple: true, class: "audit-photo-input", style: "display:none" });
+  const cameraBtn = el("button", { type: "button", class: "btn btn-small btn-primary" }, "📸 ถ่ายรูป");
+  const pickBtn = el("button", { type: "button", class: "btn btn-small btn-secondary" }, "🖼️ เลือกจากคลังภาพ");
+
+  function renderGallery() {
+    gallery.innerHTML = "";
+    photos[sectionId].forEach((p, i) => {
+      gallery.append(el("div", { class: "audit-photo-thumb" },
+        el("img", { src: p.data, alt: p.name }),
+        el("div", { class: "audit-photo-meta" }, fmtPhotoMeta(p)),
+        el("button", {
+          type: "button", class: "audit-photo-remove", title: "ลบรูปนี้",
+          onclick: () => { photos[sectionId].splice(i, 1); renderGallery(); },
+        }, "✕"),
+      ));
+    });
+    if (!photos[sectionId].length) {
+      gallery.append(el("div", { class: "muted audit-photo-empty" }, "ยังไม่มีรูปแนบ"));
+    }
+  }
+  renderGallery();
+
+  function addFile(f) {
+    if (!f) return;
+    capturePhotoWithGeo(f, photo => {
+      photos[sectionId].push(photo);
+      renderGallery();
+    });
+  }
+  cameraBtn.onclick = () => openCameraCapture(fileInput, addFile);
+  pickBtn.onclick = () => fileInput.click();
+  fileInput.addEventListener("change", () => {
+    [...fileInput.files].forEach(addFile);
+    fileInput.value = "";
+  });
+
+  return el("div", { class: "audit-photo-widget" },
+    el("div", { class: "audit-photo-label" }, label || "📷 แนบรูปภาพหลักฐาน (บังคับถ่ายทุกครั้งที่ทำกิจกรรมนี้)"),
+    gallery,
+    el("div", { class: "audit-photo-btns" }, cameraBtn, pickBtn),
+    fileInput,
+  );
+}
+
+function buildAuditChecklistSections(container, checklist, photos) {
+  container.innerHTML = "";
+  checklist = checklist || {};
+  photos = photos || {};
+  AUDIT_SECTIONS.forEach(sec => {
+    const panel = el("fieldset", { class: "audit-section" },
+      el("legend", null, sec.title, el("span", { class: "audit-freq-tag" }, sec.freq === "annual" ? "ปีละ 1 ครั้ง" : "4 เดือนครั้ง")),
+    );
+    if (sec.note) panel.append(el("p", { class: "muted audit-section-note" }, sec.note));
+    if (sec.requiresPhoto) panel.append(buildAuditPhotoWidget(sec.id, photos, sec.photoLabel));
+    (sec.items || []).forEach(it => panel.append(buildAuditItemRow(it, checklist[it.key])));
+    (sec.groups || []).forEach(g => {
+      panel.append(el("div", { class: "audit-group-label" }, g.label));
+      g.items.forEach(it => panel.append(buildAuditItemRow(it, checklist[it.key])));
+    });
+    if (sec.extraFields) {
+      const extraWrap = el("div", { class: "audit-extra-fields" });
+      sec.extraFields.forEach(f => {
+        extraWrap.append(el("label", null, f.label,
+          el("input", { type: "text", name: `secextra_${f.key}`, value: (checklist._extra && checklist._extra[f.key]) || "" }),
+        ));
+      });
+      panel.append(extraWrap);
+    }
+    container.append(panel);
+  });
+}
+
+/* ── Read all checklist values back out of the DOM ── */
+function readAuditChecklistFromDOM(container) {
+  const checklist = {};
+  AUDIT_SECTIONS.forEach(sec => {
+    const allItems = [...(sec.items || []), ...(sec.groups || []).flatMap(g => g.items)];
+    allItems.forEach(it => {
+      const checked = container.querySelector(`input[name="chk_${it.key}"]:checked`);
+      const noteEl = container.querySelector(`input[name="note_${it.key}"]`);
+      checklist[it.key] = { status: checked ? checked.value : "", note: noteEl ? noteEl.value : "" };
+      if (it.extra) {
+        const extraEl = container.querySelector(`input[name="extra_${it.extra.key}"]`);
+        checklist[it.key].extraValue = extraEl ? extraEl.value : "";
+      }
+    });
+    if (sec.extraFields) {
+      checklist._extra = checklist._extra || {};
+      sec.extraFields.forEach(f => {
+        const fEl = container.querySelector(`input[name="secextra_${f.key}"]`);
+        checklist._extra[f.key] = fEl ? fEl.value : "";
+      });
+    }
+  });
+  return checklist;
+}
+
+/* ── Expense rows (section 13) ── */
+function buildAuditExpenseRows(expenses) {
+  expenses = expenses || {};
+  const tbody = $("#auditExpenseRows");
+  tbody.innerHTML = "";
+  function recalcTotal() {
+    let total = 0;
+    AUDIT_EXPENSE_ITEMS.forEach(it => {
+      const inp = tbody.querySelector(`input[name="exp_${it.key}"]`);
+      total += Number(inp && inp.value) || 0;
+    });
+    $("#auditExpenseTotal").textContent = fmtNum(total, 2);
+  }
+  AUDIT_EXPENSE_ITEMS.forEach(it => {
+    const v = expenses[it.key] || {};
+    const tr = el("tr", null,
+      el("td", null, it.label),
+      el("td", null, el("input", {
+        type: "number", step: "0.01", name: `exp_${it.key}`, value: v.amount || "",
+        style: "width:120px", oninput: recalcTotal,
+      })),
+      el("td", null, el("input", { type: "text", name: `expnote_${it.key}`, value: v.note || "", style: "width:100%" })),
+    );
+    tbody.append(tr);
+  });
+  recalcTotal();
+}
+function readAuditExpensesFromDOM() {
+  const tbody = $("#auditExpenseRows");
+  const out = {};
+  AUDIT_EXPENSE_ITEMS.forEach(it => {
+    const amtEl = tbody.querySelector(`input[name="exp_${it.key}"]`);
+    const noteEl = tbody.querySelector(`input[name="expnote_${it.key}"]`);
+    out[it.key] = { amount: Number(amtEl && amtEl.value) || 0, note: noteEl ? noteEl.value : "" };
+  });
+  return out;
+}
+
+/* ── Issues / corrective-action rows (section 14) ── */
+function buildAuditIssueRows(issues) {
+  const tbody = $("#auditIssueRows");
+  tbody.innerHTML = "";
+  function addRow(issue) {
+    issue = issue || { issue: "", severity: "ต่ำ", action: "", dueDate: "" };
+    const tr = el("tr", null,
+      el("td", null, el("input", { type: "text", class: "audit-issue-text", value: issue.issue })),
+      el("td", null, el("select", { class: "audit-issue-sev" },
+        ...["ต่ำ", "กลาง", "สูง"].map(s => {
+          const optAttrs = { value: s };
+          if (issue.severity === s) optAttrs.selected = true;
+          return el("option", optAttrs, s);
+        }),
+      )),
+      el("td", null, el("input", { type: "text", class: "audit-issue-action", value: issue.action })),
+      el("td", null, el("input", { type: "date", class: "audit-issue-due", value: issue.dueDate })),
+      el("td", null, el("button", {
+        type: "button", class: "btn btn-small btn-secondary",
+        onclick: () => tr.remove(),
+      }, "🗑️")),
+    );
+    tbody.append(tr);
+  }
+  (issues || []).forEach(addRow);
+  const addBtn = $("#auditAddIssueBtn");
+  addBtn.onclick = () => addRow();
+}
+function readAuditIssuesFromDOM() {
+  return [...$("#auditIssueRows").querySelectorAll("tr")].map(tr => ({
+    issue: tr.querySelector(".audit-issue-text").value,
+    severity: tr.querySelector(".audit-issue-sev").value,
+    action: tr.querySelector(".audit-issue-action").value,
+    dueDate: tr.querySelector(".audit-issue-due").value,
+  })).filter(r => r.issue || r.action);
+}
+
+/* ── Create / edit audit form ── */
+function renderAuditForm(params) {
+  const key = params && params[0] ? decodeURIComponent(params[0]) : null;
+  const existing = key ? getAudit(key) : null;
+  const editing = !!existing;
+  const allRecs = getAllRecords();
+
+  const auditId = editing ? existing.id : nextAuditId();
+  $("#auditIdPreview").textContent = auditId;
+  if (editing) $("#auditFormTitle").textContent = `✏️ แก้ไขการตรวจ ${auditId}`;
+
+  let selectedPlot = null;
+  if (editing) {
+    selectedPlot = allRecs.find(m => (m.memberId || m.plot) === existing.plotKey) || null;
+  } else if (key) {
+    // key ที่ไม่ตรงกับ audit id ที่มีอยู่ → ถือว่าเป็น plotKey สำหรับสร้างใหม่ (มาจากปุ่มในหน้าแปลง)
+    selectedPlot = allRecs.find(m => (m.memberId || m.plot) === key) || null;
+  }
+
+  function renderPlotInfo() {
+    const kv = $("#auditPlotInfo");
+    kv.innerHTML = "";
+    if (!selectedPlot) {
+      kv.append(el("div", { class: "muted" }, "— ยังไม่ได้เลือกแปลง —"));
+      return;
+    }
+    const rows = [
+      ["FMU / แปลง", `${safe(selectedPlot.fmu)} · ${safe(selectedPlot.plot)}`],
+      ["เจ้าของ", safe(selectedPlot.nameTh)],
+      ["รหัสสมาชิก", safe(selectedPlot.memberId)],
+      ["จุดรับซื้อ (HUB)", safe(selectedPlot.hub)],
+      ["เบอร์โทร", safe(selectedPlot.phone)],
+      ["พื้นที่รวม", fmtNum(selectedPlot.areaRai, 2) + " ไร่"],
+      ["ปลูกยาง / พืชอื่น / บ่อน้ำ / อื่นๆ (ไร่)", `${fmtNum(selectedPlot.productiveRai,2)} / ${fmtNum(selectedPlot.otherArea,2)} / ${fmtNum(selectedPlot.waterArea,2)} / ${fmtNum(selectedPlot.riceArea,2)}`],
+    ];
+    rows.forEach(([k, v]) => { kv.append(el("dt", null, k), el("dd", null, v)); });
+  }
+  renderPlotInfo();
+
+  // ── Plot search (เลือกแปลงตอนสร้างใหม่เท่านั้น — ตอนแก้ไขล็อกไว้) ──
+  const sInput = $("#auditPlotSearch");
+  const sugBox = $("#auditPlotSuggest");
+  if (editing) {
+    sInput.disabled = true;
+    sInput.placeholder = "แก้ไขแปลงไม่ได้ — ลบแล้วสร้างใหม่หากเลือกผิด";
+  } else {
+    sInput.addEventListener("input", () => {
+      const q = sInput.value.trim().toLowerCase();
+      sugBox.innerHTML = "";
+      if (!q) { sugBox.style.display = "none"; return; }
+      const matches = allRecs.filter(m => `${m.fmu} ${m.plot} ${m.memberId} ${m.nameTh}`.toLowerCase().includes(q)).slice(0, 12);
+      sugBox.style.display = "block";
+      if (!matches.length) {
+        sugBox.append(el("div", { class: "src-sug-empty muted" }, "ไม่พบแปลงที่ตรงคำค้น"));
+        return;
+      }
+      matches.forEach(m => {
+        const row = el("div", { class: "src-sug-row" },
+          el("div", { class: "src-sug-main" }, el("b", null, safe(m.plot)), " · ", safe(m.nameTh)),
+          el("div", { class: "src-sug-meta muted" }, `${safe(m.fmu)} · ${safe(m.subdistrict)}/${safe(m.district)}`),
+          el("button", {
+            type: "button", class: "btn btn-small btn-primary",
+            onclick: e => {
+              e.preventDefault();
+              selectedPlot = m;
+              renderPlotInfo();
+              sInput.value = `${m.fmu} · ${m.plot} · ${m.nameTh}`;
+              sugBox.style.display = "none";
+            },
+          }, "เลือก"),
+        );
+        sugBox.append(row);
+      });
+    });
+    document.addEventListener("click", e => {
+      if (!sInput.contains(e.target) && !sugBox.contains(e.target)) sugBox.style.display = "none";
+    });
+    if (selectedPlot) sInput.value = `${selectedPlot.fmu} · ${selectedPlot.plot} · ${selectedPlot.nameTh}`;
+  }
+
+  // ── Section 1: general info ──
+  const form = $("#auditForm");
+  form.elements.auditDate.value = (editing && existing.auditDate) || new Date().toISOString().slice(0, 10);
+  form.elements.auditRound.value = (editing && existing.auditRound) || "1";
+  form.elements.auditLaborCount.value = (editing && existing.laborCount) || "";
+  form.elements.auditCuttingStatus.value = (editing && existing.cuttingStatus) || "none";
+  form.elements.auditCuttingYear.value = (editing && existing.cuttingYear) || "";
+  form.elements.auditGeneralNote.value = (editing && existing.generalNote) || "";
+  form.elements.auditFarmerSign.value = (editing && existing.farmerSignName) || "";
+  const me = getCurrentUser();
+  form.elements.auditRmName.value = (editing && existing.rmName) || me.displayName || me.username || "";
+
+  // ── Sections 2–12 (checklist) — photos เก็บสดใน closure นี้ ไม่ผูกกับ DOM ──
+  const photos = editing && existing.photos ? JSON.parse(JSON.stringify(existing.photos)) : {};
+  buildAuditChecklistSections($("#auditChecklistSections"), editing ? existing.checklist : {}, photos);
+
+  // ── รูปถ่ายการตรวจติดตาม (เกษตรกร + นักส่งเสริม) — ทั่วไป ไม่ผูกกับ section ใด ──
+  const visitPhotoContainer = $("#auditVisitPhotoContainer");
+  visitPhotoContainer.innerHTML = "";
+  visitPhotoContainer.append(buildAuditPhotoWidget("visit", photos, "📷 รูปถ่ายการตรวจติดตาม (เกษตรกร + นักส่งเสริม) — บังคับถ่ายทุกครั้งที่ลงพื้นที่"));
+
+  // ── Section 13 (expenses) ──
+  buildAuditExpenseRows(editing ? existing.expenses : {});
+
+  // ── Section 14 (issues) ──
+  buildAuditIssueRows(editing ? existing.issues : []);
+
+  // ── Delete (edit mode only) ──
+  const delBtn = $("#auditDeleteBtn");
+  if (editing) {
+    delBtn.style.display = "";
+    delBtn.onclick = () => {
+      if (!confirm(`ลบบันทึกการตรวจ ${auditId}?\nการกระทำนี้ย้อนกลับไม่ได้`)) return;
+      deleteAudit(auditId);
+      location.hash = "#/audits";
+    };
+  }
+
+  $("#auditPrintBtn").onclick = () => window.print();
+  $("#auditCancelBtn").onclick = () => { location.hash = "#/audits"; };
+
+  form.onsubmit = e => {
+    e.preventDefault();
+    if (!selectedPlot) { alert("⚠️ กรุณาเลือกแปลงที่จะตรวจก่อนบันทึก"); return; }
+
+    // ── เตือนถ้ากิจกรรมที่ต้องถ่ายรูป (PPE พ่นสารเคมี/ตัดหญ้า) ถูกตอบว่ามีการทำกิจกรรม (ผ่าน/ไม่ผ่าน) แต่ยังไม่แนบรูป ──
+    const checklistNow = readAuditChecklistFromDOM($("#auditChecklistSections"));
+    const missingPhotoSections = AUDIT_SECTIONS.filter(sec => {
+      if (!sec.requiresPhoto) return false;
+      const answered = (sec.items || []).some(it => {
+        const st = checklistNow[it.key] && checklistNow[it.key].status;
+        return st === "pass" || st === "fail";
+      });
+      return answered && !(photos[sec.id] && photos[sec.id].length);
+    });
+    const missingNames = missingPhotoSections.map(s => s.title);
+    // รูปถ่ายการตรวจติดตาม (เกษตรกร + นักส่งเสริม) — บังคับทุกครั้งที่ลงพื้นที่ ไม่ขึ้นกับคำตอบ checklist
+    if (!(photos.visit && photos.visit.length)) missingNames.push("รูปถ่ายการตรวจติดตาม (เกษตรกร + นักส่งเสริม)");
+    if (missingNames.length) {
+      if (!confirm(`⚠️ ยังไม่ได้แนบรูปภาพหลักฐานสำหรับ: ${missingNames.join(", ")}\nตามเกณฑ์ต้องถ่ายรูปทุกครั้งที่ทำกิจกรรม/ลงพื้นที่ — ต้องการบันทึกต่อไปหรือไม่?`)) return;
+    }
+
+    const audit = {
+      id: auditId,
+      plotKey: selectedPlot.memberId || selectedPlot.plot,
+      fmu: selectedPlot.fmu || "",
+      plot: selectedPlot.plot || "",
+      ownerName: selectedPlot.nameTh || "",
+      auditDate: form.elements.auditDate.value,
+      auditRound: form.elements.auditRound.value,
+      laborCount: Number(form.elements.auditLaborCount.value) || 0,
+      cuttingStatus: form.elements.auditCuttingStatus.value,
+      cuttingYear: form.elements.auditCuttingYear.value,
+      generalNote: form.elements.auditGeneralNote.value,
+      checklist: checklistNow,
+      photos,
+      expenses: readAuditExpensesFromDOM(),
+      issues: readAuditIssuesFromDOM(),
+      farmerSignName: form.elements.auditFarmerSign.value,
+      rmName: form.elements.auditRmName.value,
+      createdAt: editing ? existing.createdAt : Date.now(),
+      updatedAt: Date.now(),
+    };
+    upsertAudit(audit);
+    location.hash = "#/audits";
   };
 }
 
