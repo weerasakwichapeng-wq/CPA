@@ -3146,6 +3146,13 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 .lot-print-sheet { display: none; }
 @media print {
   @page { size: A4 portrait; margin: 14mm 12mm; }
+  /* หน้านี้ยาวหลายหน้าได้ตามจริง (มีรูปเยอะ) — ต้องยกเลิกการล็อก html/body ไว้ที่ 297mm +
+     overflow:hidden ที่กำหนดไว้ก่อนหน้าสำหรับ .hcvf-sheet (เอกสารหน้าเดียว) มิฉะนั้นเนื้อหา
+     ที่เกินหน้าแรกจะถูกตัดทิ้งหมด เหลือแค่ 1 หน้าเสมอไม่ว่าเนื้อหาจะยาวแค่ไหน */
+  html:has(.page-lot-detail), body:has(.page-lot-detail) {
+    height: auto !important;
+    overflow: visible !important;
+  }
   .page-lot-detail { max-width: none !important; }
   .page-lot-detail .dash-grid-12,
   .page-lot-detail .lot-detail-header { display: none !important; }
@@ -3176,6 +3183,9 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-docinfo-k { font-size: 7.5pt; color: #666; text-transform: uppercase; letter-spacing: 0.3px; }
 
   .lps-section { margin-bottom: 5mm; page-break-inside: avoid; }
+  /* ส่วนแปลงต้นทางอาจยาวหลายหน้าเมื่อมีหลาย FMU/รูปเยอะ — ต้องปล่อยให้ตัดหน้าได้ตามปกติ
+     ไม่งั้น "avoid" จะบังคับทั้งตารางยาวๆ ให้อยู่หน้าเดียวจนล้น */
+  .lps-section:has(.lps-table) { page-break-inside: auto; }
   .lps-sec-title {
     display: flex; align-items: center; gap: 2.5mm;
     font-size: 11pt; font-weight: 700; color: #1b5e20;
