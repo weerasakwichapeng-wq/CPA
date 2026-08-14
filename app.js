@@ -4035,8 +4035,10 @@ function renderLotDetail(params) {
   const allRecs = getAllRecords();
   let fscAreaSum = 0, fmus = new Set();
   lot.sources.forEach(g => {
+    // จับคู่ตามชื่อแปลงที่แน่นอนเท่านั้น (ห้าม fallback ไป g.memberId ตัวเดียว
+    // เพราะแต่ละแปลงย่อยใน FMU เดียวกันมักมี memberId/fscArea/โควต้าของตัวเองต่างกัน)
     (g.plots || []).forEach(plotName => {
-      const r = allRecs.find(x => x.plot === plotName || x.memberId === g.memberId);
+      const r = allRecs.find(x => x.plot === plotName);
       if (r) fscAreaSum += Number(r.fscArea) || 0;
     });
     if (g.fmu) fmus.add(g.fmu);
@@ -4083,21 +4085,28 @@ function renderLotDetail(params) {
   tbody.innerHTML = "";
   let anyOverQuota = false;
   lot.sources.forEach((g, gi) => {
-    const r = allRecs.find(x => x.memberId === g.memberId || (g.plots || []).includes(x.plot));
-    const quota = r ? getQuotaFor(r) : null;
-    const deliveryQuota = quota ? Number(quota.deliveryPerRound) || 0 : 0;
+    // โควต้าของ FMU นี้ = ผลรวมโควต้า/รอบของทุกแปลงย่อยที่รวมอยู่ (แต่ละแปลงมีโควต้าของตัวเอง
+    // ต่างกัน — ห้ามใช้โควต้าของแปลงใดแปลงหนึ่งมาแทนค่ารวมทั้ง FMU)
+    let deliveryQuota = 0, hasQuotaData = false;
+    const repRec = allRecs.find(x => x.memberId === g.memberId) || allRecs.find(x => (g.plots || []).includes(x.plot));
+    (g.plots || []).forEach(plotName => {
+      const pr = allRecs.find(x => x.plot === plotName);
+      if (!pr) return;
+      const dq = Number(getQuotaFor(pr).deliveryPerRound) || 0;
+      if (dq > 0) { deliveryQuota += dq; hasQuotaData = true; }
+    });
     const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
-    const overQuota = deliveryQuota > 0 && groupWeight > deliveryQuota;
+    const overQuota = hasQuotaData && groupWeight > deliveryQuota;
     if (overQuota) anyOverQuota = true;
     const groupCell = el("td", { rowspan: Math.max((g.weighings || []).length, 1) },
       el("b", null, String(gi + 1) + ". " + safe(g.fmu)), el("br"),
       el("span", { class: "muted" }, (g.plots || []).join(", ")), el("br"),
       safe(g.nameTh),
       el("br"),
-      el("span", { class: "muted" }, safe(g.hub || (r && r.hub))),
+      el("span", { class: "muted" }, safe(g.hub || (repRec && repRec.hub))),
       el("br"),
-      deliveryQuota
-        ? el("span", { class: "tr-badge " + (overQuota ? "tr-badge-red" : "tr-badge-green") }, overQuota ? `⚠️ เกิน (${fmtNum(deliveryQuota,0)})` : `ปกติ (${fmtNum(deliveryQuota,0)})`)
+      hasQuotaData
+        ? el("span", { class: "tr-badge " + (overQuota ? "tr-badge-red" : "tr-badge-green") }, overQuota ? `⚠️ เกิน (${fmtMoney(deliveryQuota)})` : `ปกติ (${fmtMoney(deliveryQuota)})`)
         : el("span", { class: "muted" }, "ไม่มีข้อมูลโควต้า"),
       el("br"),
       el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(g.memberId)}` }, "ดูแปลง →"),
@@ -4174,7 +4183,7 @@ function renderLotDetail(params) {
         polys.push(layer);
         return;
       }
-      const r = allRecs.find(x => x.plot === plotName || x.memberId === g.memberId);
+      const r = allRecs.find(x => x.plot === plotName);
       if (r && r.lat && r.lng) {
         const marker = L.circleMarker([r.lat, r.lng], { radius: 8, color: "#fff", weight: 2, fillColor: "#2e7d32", fillOpacity: 0.9 }).addTo(map);
         marker.bindPopup(`<b>${safe(plotName)}</b><br>${safe(g.nameTh)}`);

@@ -3139,6 +3139,49 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 }
 
+/* ─── ใบรับซื้อ (Lot detail) print layout ─── */
+@media print {
+  @page { size: A4 portrait; margin: 10mm; }
+  .page-lot-detail { max-width: none !important; }
+  .page-lot-detail .dash-grid-12 { display: block !important; }
+  .page-lot-detail .panel {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+    border-radius: 4px !important;
+    padding: 4mm !important;
+    margin-bottom: 4mm !important;
+    page-break-inside: avoid;
+  }
+  .page-lot-detail .chart-head h3 { font-size: 11pt !important; }
+  .page-lot-detail .chart-sub { font-size: 8pt !important; }
+  .page-lot-detail .lot-detail-header { margin-bottom: 4mm !important; }
+  .page-lot-detail .lot-id-big { font-size: 18pt !important; }
+
+  /* KPI tiles — compact grid, no shadow */
+  .page-lot-detail .quota-grid { gap: 2mm !important; }
+  .page-lot-detail .quota-tile { padding: 2mm 3mm !important; box-shadow: none !important; border: 1px solid #ddd !important; }
+  .page-lot-detail .qt-value { font-size: 11pt !important; }
+  .page-lot-detail .qt-label { font-size: 7.5pt !important; }
+
+  /* Source-plot table — shrink to fit A4 width */
+  .page-lot-detail .data-table { font-size: 7.5pt !important; }
+  .page-lot-detail .data-table th, .page-lot-detail .data-table td { padding: 1.5mm 2mm !important; }
+  .page-lot-detail tr.row-over-quota { background: #ffebee !important; }
+
+  /* Photos — small thumbnails only, no need for full size on paper */
+  .page-lot-detail .lot-photo-thumb-img { width: 40px !important; height: 32px !important; }
+  .page-lot-detail .lot-photo-thumb-cap { font-size: 6.5pt !important; }
+  .page-lot-detail .lot-photo-row { gap: 2mm !important; }
+
+  /* Interactive map doesn't print reliably — keep a fixed compact frame */
+  .page-lot-detail .detail-map { height: 70mm !important; border: 1px solid #ccc !important; }
+  .page-lot-detail .leaflet-control-zoom,
+  .page-lot-detail .leaflet-control-attribution { display: none !important; }
+
+  .page-lot-detail dl.kv { font-size: 8.5pt !important; }
+  .page-lot-detail .badges .badge { font-size: 8pt !important; }
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 12px; height: 12px; }
 ::-webkit-scrollbar-track { background: var(--gray-100); }
