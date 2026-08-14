@@ -330,18 +330,44 @@ function loadQuotas() { try { return JSON.parse(localStorage.getItem(LS_QUOTA) |
 function saveQuotas(obj) { localStorage.setItem(LS_QUOTA, JSON.stringify(obj)); }
 
 /* ── Lots storage ── */
+/* ย้ายล็อตเก่า (สร้างก่อนจะรวมแปลงย่อยเข้า FMU เดียวกัน) ให้เป็นโครงสร้างใหม่:
+   sources[] เดิม 1 แถว/แปลง (มี .plot, .weightKg, ...) → จัดกลุ่มเป็น 1 แถว/FMU
+   ที่มี .plots[] และ .weighings[] แทน — ทำแบบไม่ทำลายข้อมูลเดิม (ไม่บันทึกกลับ
+   จนกว่าจะมีการแก้ไข/บันทึกล็อตนั้นอีกครั้ง) */
+function migrateLotSources(sources) {
+  if (!Array.isArray(sources) || sources.length === 0) return sources || [];
+  if (sources[0].plots) return sources; // โครงสร้างใหม่อยู่แล้ว
+  const groups = [];
+  sources.forEach(s => {
+    let g = groups.find(x => x.fmu === s.fmu);
+    if (!g) {
+      g = { memberId: s.memberId, fmu: s.fmu, nameTh: s.nameTh, hub: s.hub, plots: [], fscArea: 0, weighings: [] };
+      groups.push(g);
+    }
+    if (s.plot && !g.plots.includes(s.plot)) g.plots.push(s.plot);
+    g.fscArea += Number(s.fscArea) || 0;
+    g.weighings.push({
+      tapperName: s.tapperName || "", weightKg: Number(s.weightKg) || 0, pricePerKg: Number(s.pricePerKg) || 0,
+      weighSlipNo: s.weighSlipNo || "", scalePhoto: s.scalePhoto || null, rubberPhoto: s.rubberPhoto || null,
+    });
+  });
+  return groups;
+}
 function loadLots() {
   // Merge: bundled (window.LOTS from data/lots.js) + user edits (localStorage)
   // localStorage takes precedence (most recent edits)
   let ls = [];
   try { ls = JSON.parse(localStorage.getItem(LS_LOTS) || "[]"); } catch { ls = []; }
   const bundled = window.LOTS || [];
-  if (ls.length === 0) return bundled.slice();
-  // Combine by lotId, localStorage wins
-  const map = new Map();
-  bundled.forEach(l => map.set(l.lotId, l));
-  ls.forEach(l => map.set(l.lotId, l));
-  return Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const all = ls.length === 0 ? bundled.slice() : (() => {
+    // Combine by lotId, localStorage wins
+    const map = new Map();
+    bundled.forEach(l => map.set(l.lotId, l));
+    ls.forEach(l => map.set(l.lotId, l));
+    return Array.from(map.values());
+  })();
+  all.forEach(l => { l.sources = migrateLotSources(l.sources); });
+  return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 function saveLots(arr) { localStorage.setItem(LS_LOTS, JSON.stringify(arr)); }
 function getLot(lotId) { return loadLots().find(l => l.lotId === lotId); }
@@ -3218,16 +3244,18 @@ function renderTrace() {
       el("th", null, "#"), el("th", null, "FMU/แปลง"), el("th", null, "เกษตรกร"),
       el("th", null, "น้ำหนัก"), el("th", null, "%"), el("th", null, "ใบชั่ง"), el("th", null, ""))));
     const tb = el("tbody");
-    lot.sources.forEach((s, i) => {
-      const pct = t.totalWeightKg ? (Number(s.weightKg) / t.totalWeightKg) * 100 : 0;
+    lot.sources.forEach((g, i) => {
+      const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+      const pct = t.totalWeightKg ? (groupWeight / t.totalWeightKg) * 100 : 0;
+      const slips = (g.weighings || []).map(w => w.weighSlipNo).filter(Boolean).join(", ");
       tb.append(el("tr", null,
         el("td", null, String(i + 1)),
-        el("td", null, el("b", null, safe(s.fmu)), " · ", safe(s.plot)),
-        el("td", null, safe(s.nameTh)),
-        el("td", null, fmtNum(s.weightKg, 2) + " กก."),
+        el("td", null, el("b", null, safe(g.fmu)), " · ", (g.plots || []).join(", ")),
+        el("td", null, safe(g.nameTh)),
+        el("td", null, fmtNum(groupWeight, 2) + " กก."),
         el("td", null, fmtNum(pct, 1) + "%"),
-        el("td", null, safe(s.weighSlipNo)),
-        el("td", null, el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(s.memberId || s.plot)}` }, "ดู →")),
+        el("td", null, safe(slips)),
+        el("td", null, el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(g.memberId)}` }, "ดู →")),
       ));
     });
     tbl.append(tb);
@@ -3247,7 +3275,7 @@ function renderTrace() {
     const lots = loadLots();
     const lotMatches = lots.filter(l => {
       const blob = [l.lotId, l.hub, l.productForm, l.fscClaim, l.transferDocNo,
-        ...(l.sources || []).map(s => `${s.fmu} ${s.plot} ${s.nameTh}`)].join(" ").toLowerCase();
+        ...(l.sources || []).map(s => `${s.fmu} ${(s.plots || []).join(" ")} ${s.nameTh}`)].join(" ").toLowerCase();
       return blob.includes(q);
     });
     lotMatches.slice(0, 5).forEach(lot => renderLotMatch(lot, result));
@@ -3569,12 +3597,19 @@ function renderUsersAdmin() {
    เมื่อรับซื้อยางจากหลายแปลงรวมเป็นล็อต → สร้างเลขล็อต → ค้นย้อนได้
    ════════════════════════════════════════════════════════════ */
 
+/* sources = แปลงจัดกลุ่มตาม FMU แต่ละกลุ่มมี plots[] (แปลงย่อยที่รวม) และ weighings[] (ชั่งได้หลายรอบ) */
 function calcLotTotals(lot) {
   const drcPct = (Number(lot.drcPercent) || 0) / 100;
-  const totalWeightKg = (lot.sources || []).reduce((s, x) => s + (Number(x.weightKg) || 0), 0);
+  let totalWeightKg = 0, totalAmount = 0, plotCount = 0;
+  (lot.sources || []).forEach(g => {
+    plotCount += (g.plots || []).length;
+    (g.weighings || []).forEach(w => {
+      totalWeightKg += Number(w.weightKg) || 0;
+      totalAmount += (Number(w.weightKg) || 0) * (Number(w.pricePerKg) || 0);
+    });
+  });
   const totalDrcKg = totalWeightKg * drcPct;
-  const totalAmount = (lot.sources || []).reduce((s, x) => s + (Number(x.weightKg) || 0) * (Number(x.pricePerKg) || 0), 0);
-  return { totalWeightKg, totalDrcKg, totalAmount, plotCount: (lot.sources || []).length };
+  return { totalWeightKg, totalDrcKg, totalAmount, plotCount };
 }
 
 /* ── Lots list ── */
@@ -3597,7 +3632,7 @@ function renderLots() {
     const totalWeight = lots.reduce((s, l) => s + calcLotTotals(l).totalWeightKg, 0);
     const totalDry = lots.reduce((s, l) => s + calcLotTotals(l).totalDrcKg, 0);
     const totalPlots = new Set();
-    lots.forEach(l => (l.sources || []).forEach(s => totalPlots.add(s.plot)));
+    lots.forEach(l => (l.sources || []).forEach(g => (g.plots || []).forEach(p => totalPlots.add(p))));
     const openCount = lots.filter(l => l.status === "Open").length;
     const stats = $("#lotStats");
     if (stats) {
@@ -3628,7 +3663,7 @@ function renderLots() {
       if (fS && l.status !== fS) return;
       if (q) {
         const blob = [l.lotId, l.hub, l.productForm, l.fscClaim, l.buyer, l.transferDocNo,
-          ...(l.sources || []).map(s => `${s.fmu} ${s.plot} ${s.nameTh}`)].join(" ").toLowerCase();
+          ...(l.sources || []).map(s => `${s.fmu} ${(s.plots || []).join(" ")} ${s.nameTh}`)].join(" ").toLowerCase();
         if (!blob.includes(q)) return;
       }
       shown++;
@@ -3742,61 +3777,100 @@ function renderLotForm(params) {
   receiptWrap.innerHTML = "";
   receiptWrap.append(buildPhotoPickerButton("แนบรูปใบเสร็จ", () => receiptPhoto, photo => { receiptPhoto = photo; }));
 
-  // ── Source plots manager ──
+  // ── Source plots manager — จัดกลุ่มตาม FMU (รวมแปลงย่อยเข้าด้วยกัน)
+  //    แต่ละ FMU ชั่งได้หลายรอบ (weighings[]) กด "＋ เพิ่มรอบชั่ง" เพื่อเพิ่มรอบใหม่ ──
   const allRecs = getAllRecords();
-  let sources = (editing && editing.sources) ? editing.sources.map(s => ({ ...s })) : [];
+  let sources = (editing && editing.sources) ? editing.sources.map(s => ({
+    ...s,
+    plots: [...(s.plots || [])],
+    weighings: (s.weighings || []).map(w => ({ ...w })),
+  })) : [];
+
+  function newWeighing(defaultPrice) {
+    return { tapperName: "", weightKg: "", pricePerKg: defaultPrice || "", weighSlipNo: "", scalePhoto: null, rubberPhoto: null };
+  }
 
   function renderSources() {
     const tbody = $("#srcPlotRows");
     tbody.innerHTML = "";
     const drcPct = (Number(form.elements.drcPercent.value) || 65) / 100;
-    let totalW = 0, totalD = 0, totalAmt = 0;
-    sources.forEach((s, i) => {
-      const weight = Number(s.weightKg) || 0;
-      const price = Number(s.pricePerKg) || 0;
-      const amount = weight * price;
-      const dry = weight * drcPct;
-      totalW += weight; totalD += dry; totalAmt += amount;
-      const tr = el("tr", null,
-        el("td", null, el("b", null, safe(s.fmu)), el("br"), el("span", { class: "muted" }, safe(s.plot))),
-        el("td", null, safe(s.nameTh), el("br"), el("input", {
-          type: "text", value: s.tapperName || "", placeholder: "ชื่อคนกรีด",
-          style: "width:130px", oninput: e => { s.tapperName = e.target.value; },
-        })),
-        el("td", null, el("input", {
-          type: "number", step: "0.01", value: s.weightKg || "",
-          style: "width:90px",
-          oninput: e => { s.weightKg = e.target.value; renderSources(); },
-        })),
-        el("td", null, el("input", {
-          type: "number", step: "0.01", value: s.pricePerKg || "",
-          style: "width:80px",
-          oninput: e => { s.pricePerKg = e.target.value; renderSources(); },
-        })),
-        el("td", null, fmtNum(amount, 2)),
-        el("td", null, el("input", {
-          type: "text", value: s.weighSlipNo || "",
-          placeholder: "เลขใบชั่ง/รอบ",
-          style: "width:120px",
-          oninput: e => { s.weighSlipNo = e.target.value; },
-        })),
-        el("td", null, fmtNum(dry, 2)),
-        el("td", null,
-          buildPhotoPickerButton("ตาชั่ง", () => s.scalePhoto, photo => { s.scalePhoto = photo; }),
-          el("br"),
-          buildPhotoPickerButton("ยาง", () => s.rubberPhoto, photo => { s.rubberPhoto = photo; }),
+    let totalW = 0, totalD = 0, totalAmt = 0, totalPlots = 0;
+
+    sources.forEach((g, gi) => {
+      totalPlots += (g.plots || []).length;
+      const groupCell = el("td", { rowspan: Math.max(g.weighings.length, 1) },
+        el("b", null, safe(g.fmu)), el("br"),
+        el("span", { class: "muted" }, (g.plots || []).join(", ")), el("br"),
+        el("span", null, safe(g.nameTh)), el("br"),
+        el("div", { class: "src-group-actions" },
+          el("button", {
+            type: "button", class: "btn btn-small btn-primary",
+            onclick: () => { g.weighings.push(newWeighing(g.weighings[0] && g.weighings[0].pricePerKg)); renderSources(); },
+          }, "＋ เพิ่มรอบชั่ง"),
+          el("button", {
+            type: "button", class: "btn btn-small btn-secondary",
+            onclick: () => { sources.splice(gi, 1); renderSources(); },
+          }, "🗑️ ลบทั้ง FMU"),
         ),
-        el("td", null, el("button", {
-          type: "button", class: "btn btn-small btn-secondary",
-          onclick: () => { sources.splice(i, 1); renderSources(); },
-        }, "🗑️")),
       );
-      tbody.append(tr);
+
+      if (g.weighings.length === 0) {
+        tbody.append(el("tr", null,
+          groupCell,
+          el("td", { colspan: 8, class: "muted" }, "— ยังไม่มีรอบชั่ง กด \"＋ เพิ่มรอบชั่ง\" —"),
+        ));
+        return;
+      }
+
+      g.weighings.forEach((w, wi) => {
+        const weight = Number(w.weightKg) || 0;
+        const price = Number(w.pricePerKg) || 0;
+        const amount = weight * price;
+        const dry = weight * drcPct;
+        totalW += weight; totalD += dry; totalAmt += amount;
+        const tr = el("tr", null);
+        if (wi === 0) tr.append(groupCell);
+        tr.append(
+          el("td", null, el("input", {
+            type: "text", value: w.tapperName || "", placeholder: "ชื่อคนกรีด",
+            style: "width:130px", oninput: e => { w.tapperName = e.target.value; },
+          })),
+          el("td", null, el("input", {
+            type: "number", step: "0.01", value: w.weightKg || "",
+            style: "width:90px",
+            oninput: e => { w.weightKg = e.target.value; renderSources(); },
+          })),
+          el("td", null, el("input", {
+            type: "number", step: "0.01", value: w.pricePerKg || "",
+            style: "width:80px",
+            oninput: e => { w.pricePerKg = e.target.value; renderSources(); },
+          })),
+          el("td", null, fmtNum(amount, 2)),
+          el("td", null, el("input", {
+            type: "text", value: w.weighSlipNo || "",
+            placeholder: "เลขใบชั่ง/รอบ",
+            style: "width:120px",
+            oninput: e => { w.weighSlipNo = e.target.value; },
+          })),
+          el("td", null, fmtNum(dry, 2)),
+          el("td", null,
+            buildPhotoPickerButton("ตาชั่ง", () => w.scalePhoto, photo => { w.scalePhoto = photo; }),
+            el("br"),
+            buildPhotoPickerButton("ยาง", () => w.rubberPhoto, photo => { w.rubberPhoto = photo; }),
+          ),
+          el("td", null, el("button", {
+            type: "button", class: "btn btn-small btn-secondary",
+            onclick: () => { g.weighings.splice(wi, 1); renderSources(); },
+          }, "🗑️")),
+        );
+        tbody.append(tr);
+      });
     });
+
     $("#srcTotalWeight").textContent = fmtNum(totalW, 2);
     $("#srcTotalAmount").textContent = fmtNum(totalAmt, 2);
     $("#srcTotalDry").textContent = fmtNum(totalD, 2);
-    $("#srcPlotCount").textContent = `${sources.length} แปลง`;
+    $("#srcPlotCount").textContent = `${totalPlots} แปลง (${sources.length} FMU)`;
     $("#srcEmptyMsg").style.display = sources.length ? "none" : "";
   }
   renderSources();
@@ -3822,7 +3896,7 @@ function renderLotForm(params) {
     }
     sugBox.style.display = "block";
     matches.forEach(m => {
-      const exists = sources.some(s => s.plot === m.plot);
+      const exists = sources.some(s => (s.plots || []).includes(m.plot));
       const row = el("div", { class: "src-sug-row" + (exists ? " is-added" : "") },
         el("div", { class: "src-sug-main" },
           el("b", null, safe(m.plot)), " · ", safe(m.nameTh),
@@ -3834,21 +3908,24 @@ function renderLotForm(params) {
           type: "button", class: "btn btn-small btn-primary",
           onclick: e => {
             e.preventDefault();
-            const q2 = getQuotaFor(m);
-            sources.push({
-              memberId: m.memberId || "",
-              plot: m.plot || "",
-              fmu: m.fmu || "",
-              nameTh: m.nameTh || "",
-              hub: m.hub || "",
-              tapperName: "",
-              weightKg: "",
-              pricePerKg: q2.pricePerKg || "",
-              weighSlipNo: "",
-              fscArea: m.fscArea || 0,
-              scalePhoto: null,
-              rubberPhoto: null,
-            });
+            // รวมแปลงย่อยเข้ากลุ่มเดียวกันตาม FMU — ถ้ามีกลุ่ม FMU นี้อยู่แล้ว เพิ่มแค่แปลงเข้ากลุ่ม
+            // ไม่ต้องสร้างรอบชั่งใหม่ (รอบชั่งจัดการแยกผ่านปุ่ม "＋ เพิ่มรอบชั่ง")
+            let group = sources.find(s => s.fmu === m.fmu);
+            if (group) {
+              if (!group.plots.includes(m.plot)) group.plots.push(m.plot);
+              group.fscArea = (Number(group.fscArea) || 0) + (Number(m.fscArea) || 0);
+            } else {
+              const q2 = getQuotaFor(m);
+              sources.push({
+                memberId: m.memberId || "",
+                fmu: m.fmu || "",
+                nameTh: m.nameTh || "",
+                hub: m.hub || "",
+                plots: [m.plot || ""],
+                fscArea: m.fscArea || 0,
+                weighings: [newWeighing(q2.pricePerKg)],
+              });
+            }
             renderSources();
             // รอ tick ถัดไปก่อนสร้างรายการใหม่ — ถ้ารื้อ DOM ทันทีในตัว handler นี้ ปุ่มที่เพิ่งคลิกจะหลุดจาก
             // DOM ก่อน document click-outside listener (bubble phase) เช็คว่าคลิกอยู่ใน sugBox หรือไม่
@@ -3893,13 +3970,16 @@ function renderLotForm(params) {
       },
       receiptPhoto,
       closure: (editing && editing.closure) || { closed: false, photo: null, closedAt: null },
-      sources: sources.map(s => ({
-        memberId: s.memberId, plot: s.plot, fmu: s.fmu, nameTh: s.nameTh, hub: s.hub,
-        tapperName: s.tapperName || "",
-        weightKg: Number(s.weightKg) || 0, pricePerKg: Number(s.pricePerKg) || 0,
-        weighSlipNo: s.weighSlipNo || "",
-        fscArea: s.fscArea || 0,
-        scalePhoto: s.scalePhoto || null, rubberPhoto: s.rubberPhoto || null,
+      sources: sources.map(g => ({
+        memberId: g.memberId, fmu: g.fmu, nameTh: g.nameTh, hub: g.hub,
+        plots: [...(g.plots || [])],
+        fscArea: g.fscArea || 0,
+        weighings: (g.weighings || []).map(w => ({
+          tapperName: w.tapperName || "",
+          weightKg: Number(w.weightKg) || 0, pricePerKg: Number(w.pricePerKg) || 0,
+          weighSlipNo: w.weighSlipNo || "",
+          scalePhoto: w.scalePhoto || null, rubberPhoto: w.rubberPhoto || null,
+        })),
       })),
       createdAt: (editing && editing.createdAt) || Date.now(),
       updatedAt: Date.now(),
@@ -3928,12 +4008,12 @@ function renderLotDetail(params) {
   // KPIs
   const allRecs = getAllRecords();
   let fscAreaSum = 0, fmus = new Set();
-  lot.sources.forEach(s => {
-    const r = allRecs.find(x => x.plot === s.plot || x.memberId === s.memberId);
-    if (r) {
-      fscAreaSum += Number(r.fscArea) || 0;
-      if (r.fmu) fmus.add(r.fmu);
-    }
+  lot.sources.forEach(g => {
+    (g.plots || []).forEach(plotName => {
+      const r = allRecs.find(x => x.plot === plotName || x.memberId === g.memberId);
+      if (r) fscAreaSum += Number(r.fscArea) || 0;
+    });
+    if (g.fmu) fmus.add(g.fmu);
   });
   const kpi = $("#lotKpis"); kpi.innerHTML = "";
   [
@@ -3972,41 +4052,56 @@ function renderLotDetail(params) {
   receiptEl.innerHTML = "";
   receiptEl.append(renderPhotoThumbLink(lot.receiptPhoto, "ใบเสร็จรับเงิน"));
 
-  // Source plots table — พร้อมเช็คโควต้าต่อรอบของเกษตรกรแต่ละราย
+  // Source plots table — จัดกลุ่มตาม FMU, แต่ละกลุ่มมีได้หลายรอบชั่ง พร้อมเช็คโควต้าต่อรอบของเกษตรกร
   const tbody = $("#lotSourceTable tbody");
   tbody.innerHTML = "";
   let anyOverQuota = false;
-  lot.sources.forEach((s, i) => {
-    const dry = (Number(s.weightKg) || 0) * (Number(lot.drcPercent) / 100);
-    const pct = totals.totalWeightKg ? (Number(s.weightKg) / totals.totalWeightKg) * 100 : 0;
-    const amount = (Number(s.weightKg) || 0) * (Number(s.pricePerKg) || 0);
-    const r = allRecs.find(x => x.plot === s.plot || x.memberId === s.memberId);
+  lot.sources.forEach((g, gi) => {
+    const r = allRecs.find(x => x.memberId === g.memberId || (g.plots || []).includes(x.plot));
     const quota = r ? getQuotaFor(r) : null;
     const deliveryQuota = quota ? Number(quota.deliveryPerRound) || 0 : 0;
-    const overQuota = deliveryQuota > 0 && (Number(s.weightKg) || 0) > deliveryQuota;
+    const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+    const overQuota = deliveryQuota > 0 && groupWeight > deliveryQuota;
     if (overQuota) anyOverQuota = true;
-    const tr = el("tr", { class: overQuota ? "row-over-quota" : "" },
-      el("td", null, String(i + 1)),
-      el("td", null, el("b", null, safe(s.fmu)), el("br"), el("span", { class: "muted" }, safe(s.plot))),
-      el("td", null, safe(s.nameTh), s.tapperName ? el("div", { class: "muted" }, "คนกรีด: " + s.tapperName) : null),
-      el("td", null, safe(s.hub || (r && r.hub))),
-      el("td", null, fmtNum(s.weightKg, 2)),
-      el("td", null, fmtNum(pct, 1) + "%"),
-      el("td", null, fmtNum(s.pricePerKg, 2)),
-      el("td", null, fmtNum(amount, 2)),
-      el("td", null, fmtNum(dry, 2)),
-      el("td", null, safe(s.weighSlipNo)),
-      el("td", null, s.fscArea > 0 ? el("span", { class: "tr-badge tr-badge-green" }, "✓") : el("span", { class: "tr-badge tr-badge-gray" }, "-")),
-      el("td", { class: "lot-photo-cell" },
-        renderPhotoThumbLink(s.scalePhoto, "ตาชั่ง"),
-        renderPhotoThumbLink(s.rubberPhoto, "ยาง"),
-      ),
-      el("td", null, deliveryQuota
+    const groupCell = el("td", { rowspan: Math.max((g.weighings || []).length, 1) },
+      el("b", null, String(gi + 1) + ". " + safe(g.fmu)), el("br"),
+      el("span", { class: "muted" }, (g.plots || []).join(", ")), el("br"),
+      safe(g.nameTh),
+      el("br"),
+      el("span", { class: "muted" }, safe(g.hub || (r && r.hub))),
+      el("br"),
+      deliveryQuota
         ? el("span", { class: "tr-badge " + (overQuota ? "tr-badge-red" : "tr-badge-green") }, overQuota ? `⚠️ เกิน (${fmtNum(deliveryQuota,0)})` : `ปกติ (${fmtNum(deliveryQuota,0)})`)
-        : el("span", { class: "muted" }, "-")),
-      el("td", null, el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(s.memberId || s.plot)}` }, "ดู →")),
+        : el("span", { class: "muted" }, "ไม่มีข้อมูลโควต้า"),
+      el("br"),
+      el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(g.memberId)}` }, "ดูแปลง →"),
     );
-    tbody.append(tr);
+    const weighings = g.weighings && g.weighings.length ? g.weighings : [];
+    if (!weighings.length) {
+      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 8, class: "muted" }, "— ไม่มีรอบชั่ง —")));
+      return;
+    }
+    weighings.forEach((w, wi) => {
+      const dry = (Number(w.weightKg) || 0) * (Number(lot.drcPercent) / 100);
+      const pct = totals.totalWeightKg ? (Number(w.weightKg) / totals.totalWeightKg) * 100 : 0;
+      const amount = (Number(w.weightKg) || 0) * (Number(w.pricePerKg) || 0);
+      const tr = el("tr", { class: overQuota ? "row-over-quota" : "" });
+      if (wi === 0) tr.append(groupCell);
+      tr.append(
+        el("td", null, safe(w.tapperName)),
+        el("td", null, fmtNum(w.weightKg, 2)),
+        el("td", null, fmtNum(pct, 1) + "%"),
+        el("td", null, fmtNum(w.pricePerKg, 2)),
+        el("td", null, fmtNum(amount, 2)),
+        el("td", null, fmtNum(dry, 2)),
+        el("td", null, safe(w.weighSlipNo)),
+        el("td", { class: "lot-photo-cell" },
+          renderPhotoThumbLink(w.scalePhoto, "ตาชั่ง"),
+          renderPhotoThumbLink(w.rubberPhoto, "ยาง"),
+        ),
+      );
+      tbody.append(tr);
+    });
   });
   $("#lotQuotaWarnNote").style.display = anyOverQuota ? "" : "none";
 
@@ -4031,32 +4126,35 @@ function renderLotDetail(params) {
   }).addTo(map);
 
   const polys = [];
-  lot.sources.forEach((s, i) => {
-    const p = PRODUCTIVE.find(p => p.name === s.plot);
-    if (p) {
-      const layer = L.polygon(p.coordinates.map(c => [c[1], c[0]]), {
-        color: "#00e676", weight: 3, fillColor: "#00c853", fillOpacity: 0.55,
-      }).addTo(map);
-      layer.bindPopup(`<b>${p.name}</b><br>${safe(s.nameTh)}<br>น้ำหนัก: ${fmtNum(s.weightKg,2)} กก.`);
-      polys.push(layer);
-    } else {
+  lot.sources.forEach(g => {
+    const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+    (g.plots || []).forEach(plotName => {
+      const p = PRODUCTIVE.find(p => p.name === plotName);
+      if (p) {
+        const layer = L.polygon(p.coordinates.map(c => [c[1], c[0]]), {
+          color: "#00e676", weight: 3, fillColor: "#00c853", fillOpacity: 0.55,
+        }).addTo(map);
+        layer.bindPopup(`<b>${p.name}</b><br>${safe(g.nameTh)}<br>น้ำหนักรวม FMU: ${fmtNum(groupWeight,2)} กก.`);
+        polys.push(layer);
+        return;
+      }
       // No productive polygon — try landtitle then fallback to lat/lng
-      const lt = LANDTITLES.find(p => p.name && p.name.split(",").map(x => x.trim()).includes(s.plot));
+      const lt = LANDTITLES.find(p => p.name && p.name.split(",").map(x => x.trim()).includes(plotName));
       if (lt) {
         const layer = L.polygon(lt.coordinates.map(c => [c[1], c[0]]), {
           color: "#ffd600", weight: 3, fillColor: "#fff59d", fillOpacity: 0.25, dashArray: "8,5",
         }).addTo(map);
-        layer.bindPopup(`<b>${lt.name}</b><br>${safe(s.nameTh)}<br>(เอกสารสิทธิ์)`);
+        layer.bindPopup(`<b>${lt.name}</b><br>${safe(g.nameTh)}<br>(เอกสารสิทธิ์)`);
         polys.push(layer);
-      } else {
-        const r = allRecs.find(x => x.plot === s.plot || x.memberId === s.memberId);
-        if (r && r.lat && r.lng) {
-          const marker = L.circleMarker([r.lat, r.lng], { radius: 8, color: "#fff", weight: 2, fillColor: "#2e7d32", fillOpacity: 0.9 }).addTo(map);
-          marker.bindPopup(`<b>${safe(s.plot)}</b><br>${safe(s.nameTh)}`);
-          polys.push(marker);
-        }
+        return;
       }
-    }
+      const r = allRecs.find(x => x.plot === plotName || x.memberId === g.memberId);
+      if (r && r.lat && r.lng) {
+        const marker = L.circleMarker([r.lat, r.lng], { radius: 8, color: "#fff", weight: 2, fillColor: "#2e7d32", fillOpacity: 0.9 }).addTo(map);
+        marker.bindPopup(`<b>${safe(plotName)}</b><br>${safe(g.nameTh)}`);
+        polys.push(marker);
+      }
+    });
   });
   if (polys.length) {
     map.fitBounds(L.featureGroup(polys).getBounds(), { padding: [30, 30] });
@@ -4117,25 +4215,28 @@ function renderLotDetail(params) {
 /* ── 5. สร้างการตรวจสอบแหล่งที่มา — รวม polygon ของแปลงต้นทางในล็อตเป็นไฟล์ KML เดียว ── */
 function buildLotSourceKML(lot) {
   const placemarks = [];
-  lot.sources.forEach(s => {
-    let coords = null;
-    const p = PRODUCTIVE.find(p => p.name === s.plot);
-    if (p) coords = p.coordinates;
-    else {
-      const lt = LANDTITLES.find(p => p.name && p.name.split(",").map(x => x.trim()).includes(s.plot));
-      if (lt) coords = lt.coordinates;
-    }
-    if (!coords || coords.length < 3) return;
-    const coordStr = coords.map(c => `${c[0]},${c[1]},0`).join(" ");
-    const name = `${s.fmu} · ${s.plot}`.replace(/[<>&]/g, "");
-    const desc = `${(s.nameTh || "").replace(/[<>&]/g, "")} — น้ำหนัก ${fmtNum(s.weightKg, 2)} กก. (ล็อต ${lot.lotId})`;
-    placemarks.push(`    <Placemark>
+  lot.sources.forEach(g => {
+    const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+    (g.plots || []).forEach(plotName => {
+      let coords = null;
+      const p = PRODUCTIVE.find(p => p.name === plotName);
+      if (p) coords = p.coordinates;
+      else {
+        const lt = LANDTITLES.find(p => p.name && p.name.split(",").map(x => x.trim()).includes(plotName));
+        if (lt) coords = lt.coordinates;
+      }
+      if (!coords || coords.length < 3) return;
+      const coordStr = coords.map(c => `${c[0]},${c[1]},0`).join(" ");
+      const name = `${g.fmu} · ${plotName}`.replace(/[<>&]/g, "");
+      const desc = `${(g.nameTh || "").replace(/[<>&]/g, "")} — น้ำหนักรวม FMU ${fmtNum(groupWeight, 2)} กก. (ล็อต ${lot.lotId})`;
+      placemarks.push(`    <Placemark>
       <name>${name}</name>
       <description>${desc}</description>
       <Polygon>
         <outerBoundaryIs><LinearRing><coordinates>${coordStr}</coordinates></LinearRing></outerBoundaryIs>
       </Polygon>
     </Placemark>`);
+    });
   });
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">

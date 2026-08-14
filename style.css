@@ -3355,6 +3355,9 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 .lot-photo-cell { display: flex; gap: 6px; }
 .lot-photo-cell .lot-photo-thumb-link { width: 64px; }
 .lot-photo-cell .lot-photo-thumb-img { width: 64px; height: 48px; }
+
+.src-table td[rowspan] { vertical-align: top; background: #f7faf7; min-width: 180px; }
+.src-group-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .lot-photo-cell .lot-photo-thumb-cap { display: none; }
 
 tr.row-over-quota { background: #ffebee; }
