@@ -366,7 +366,10 @@ function loadLots() {
     ls.forEach(l => map.set(l.lotId, l));
     return Array.from(map.values());
   })();
-  all.forEach(l => { l.sources = migrateLotSources(l.sources); });
+  all.forEach(l => {
+    l.sources = migrateLotSources(l.sources);
+    if (!l.receiptPhotos) l.receiptPhotos = l.receiptPhoto ? [l.receiptPhoto] : [];
+  });
   return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 function saveLots(arr) { localStorage.setItem(LS_LOTS, JSON.stringify(arr)); }
@@ -3776,11 +3779,11 @@ function renderLotForm(params) {
     truckPhotoWrap.append(buildPhotoPickerButton(label, () => truckPhotos[key], photo => { truckPhotos[key] = photo; }));
   });
 
-  // ── 6. ใบเสร็จรับเงิน ──
-  let receiptPhoto = (editing && editing.receiptPhoto) || null;
+  // ── 6. ใบเสร็จรับเงิน — แนบได้หลายใบ ──
+  const receiptPhotosHolder = { receipt: (editing && editing.receiptPhotos) || (editing && editing.receiptPhoto ? [editing.receiptPhoto] : []) };
   const receiptWrap = $("#receiptPhotoButton");
   receiptWrap.innerHTML = "";
-  receiptWrap.append(buildPhotoPickerButton("แนบรูปใบเสร็จ", () => receiptPhoto, photo => { receiptPhoto = photo; }));
+  receiptWrap.append(buildAuditPhotoWidget("receipt", receiptPhotosHolder, "🧾 แนบรูปใบเสร็จรับเงิน (แนบได้หลายใบ)"));
 
   // ── Source plots manager — จัดกลุ่มตาม FMU (รวมแปลงย่อยเข้าด้วยกัน)
   //    แต่ละ FMU ชั่งได้หลายรอบ (weighings[]) กด "＋ เพิ่มรอบชั่ง" เพื่อเพิ่มรอบใหม่ ──
@@ -3994,7 +3997,7 @@ function renderLotForm(params) {
         contamCheck: data.truckContamCheck || "",
         photos: truckPhotos,
       },
-      receiptPhoto,
+      receiptPhotos: receiptPhotosHolder.receipt,
       closure: (editing && editing.closure) || { closed: false, photo: null, closedAt: null },
       sources: sources.map(g => ({
         memberId: g.memberId, fmu: g.fmu, nameTh: g.nameTh, hub: g.hub,
@@ -4075,10 +4078,11 @@ function renderLotDetail(params) {
     truckPhotosEl.append(renderPhotoThumbLink(truck.photos && truck.photos[key], label));
   });
 
-  // ── ใบเสร็จรับเงิน ──
+  // ── ใบเสร็จรับเงิน (แนบได้หลายใบ) ──
   const receiptEl = $("#lotReceiptPhoto");
   receiptEl.innerHTML = "";
-  receiptEl.append(renderPhotoThumbLink(lot.receiptPhoto, "ใบเสร็จรับเงิน"));
+  const receiptPhotos = lot.receiptPhotos && lot.receiptPhotos.length ? lot.receiptPhotos : [null];
+  receiptPhotos.forEach((p, i) => receiptEl.append(renderPhotoThumbLink(p, `ใบเสร็จรับเงิน${receiptPhotos.length > 1 ? " " + (i + 1) : ""}`)));
 
   // Source plots table — จัดกลุ่มตาม FMU, แต่ละกลุ่มมีได้หลายรอบชั่ง พร้อมเช็คโควต้าต่อรอบของเกษตรกร
   const tbody = $("#lotSourceTable tbody");
@@ -4323,10 +4327,11 @@ function renderLotDetail(params) {
       weighingPhotosTitle.style.display = "none";
     }
 
-    // 3. ใบเสร็จรับเงิน
+    // 3. ใบเสร็จรับเงิน (แนบได้หลายใบ)
     const receiptEl = $("#lpsReceiptPhoto");
     receiptEl.innerHTML = "";
-    receiptEl.append(renderPhotoThumbLink(lot.receiptPhoto, "ใบเสร็จรับเงิน"));
+    const lpsReceiptPhotos = lot.receiptPhotos && lot.receiptPhotos.length ? lot.receiptPhotos : [null];
+    lpsReceiptPhotos.forEach((p, i) => receiptEl.append(renderPhotoThumbLink(p, `ใบเสร็จรับเงิน${lpsReceiptPhotos.length > 1 ? " " + (i + 1) : ""}`)));
 
     // 4. ปิดรถ
     const closure = lot.closure || {};
