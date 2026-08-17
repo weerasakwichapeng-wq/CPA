@@ -234,26 +234,46 @@ async function hashPassword(password, username) {
   const buf = await crypto.subtle.digest("SHA-256", enc);
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
+// _usersCache เก็บข้อมูล users ที่ sync มาจาก Firestore แบบ real-time (ดูส่วน
+// "Firebase live sync" ท้ายบล็อก storage) — เริ่มต้นด้วยสำเนา localStorage เดิม
+// เผื่อเปิดเว็บตอนไม่มีเน็ต แล้ว Firestore จะเข้ามาแทนที่ทันทีที่ sync ได้
+let _usersCache = (() => {
+  try { return JSON.parse(localStorage.getItem(LS_USERS) || "[]"); } catch { return []; }
+})();
+// structuredClone (deep) ขาเข้า/ขาออก — เหตุผลเดียวกับ setLotsCache/loadLots
+// (กัน object ที่ผู้เรียกถือไว้ไปแก้ตรงๆ จนกระทบ _usersCache โดยไม่ผ่าน saveUsers())
+function setUsersCache(arr) { _usersCache = arr.map(u => structuredClone(u)); }
 function loadUsers() {
-  let ls = [];
-  try { ls = JSON.parse(localStorage.getItem(LS_USERS) || "[]"); } catch { ls = []; }
   const bundled = window.USERS || [];
-  // Merge: บัญชีจาก data/users.js (bundled) เป็นหลัก + localStorage เป็น override
+  // Merge: บัญชีจาก data/users.js (bundled) เป็นหลัก + Firestore เป็น override
   // (เช่น password ที่เปลี่ยนใหม่, lastLoginAt) และ user ที่เพิ่มผ่าน admin panel
   const map = new Map();
   bundled.forEach(u => map.set(u.username, { ...u }));
-  ls.forEach(u => {
+  _usersCache.forEach(u => {
     if (map.has(u.username)) {
-      // user มีอยู่ใน bundle — localStorage override เฉพาะ field ที่อัพเดท
+      // user มีอยู่ใน bundle — Firestore override เฉพาะ field ที่อัพเดท
       map.set(u.username, { ...map.get(u.username), ...u });
     } else {
       // user ใหม่ที่เพิ่มผ่าน admin panel หลัง deploy
-      map.set(u.username, u);
+      map.set(u.username, structuredClone(u));
     }
   });
   return Array.from(map.values());
 }
-function saveUsers(arr) { localStorage.setItem(LS_USERS, JSON.stringify(arr)); }
+function saveUsers(arr) {
+  const prevMap = new Map(_usersCache.map(u => [u.username, u]));
+  const nextIds = new Set(arr.map(u => u.username));
+  const batch = fbDb.batch();
+  let ops = 0;
+  arr.forEach(u => {
+    const prev = prevMap.get(u.username);
+    if (!prev || JSON.stringify(prev) !== JSON.stringify(u)) { batch.set(fbDb.collection("users").doc(u.username), u); ops++; }
+  });
+  prevMap.forEach((_, username) => { if (!nextIds.has(username)) { batch.delete(fbDb.collection("users").doc(username)); ops++; } });
+  if (ops > 0) batch.commit().catch(err => console.error("บันทึกผู้ใช้ขึ้น Firestore ล้มเหลว:", err));
+  setUsersCache(arr);
+  try { localStorage.setItem(LS_USERS, JSON.stringify(arr)); } catch {}
+}
 function hasAdmin() { return loadUsers().some(u => u.role === "admin"); }
 
 function getSession() {
@@ -353,26 +373,51 @@ function migrateLotSources(sources) {
   });
   return groups;
 }
-function loadLots() {
-  // Merge: bundled (window.LOTS from data/lots.js) + user edits (localStorage)
-  // localStorage takes precedence (most recent edits)
-  let ls = [];
-  try { ls = JSON.parse(localStorage.getItem(LS_LOTS) || "[]"); } catch { ls = []; }
-  const bundled = window.LOTS || [];
-  const all = ls.length === 0 ? bundled.slice() : (() => {
-    // Combine by lotId, localStorage wins
-    const map = new Map();
-    bundled.forEach(l => map.set(l.lotId, l));
-    ls.forEach(l => map.set(l.lotId, l));
-    return Array.from(map.values());
-  })();
+// _lotsCache เก็บข้อมูลล็อตที่ sync มาจาก Firestore แบบ real-time (ดูส่วน
+// "Firebase live sync" ท้ายบล็อก storage) — เริ่มต้นด้วยสำเนา localStorage เดิม
+// (merge กับ bundled data/lots.js) เผื่อเปิดเว็บตอนไม่มีเน็ต แล้ว Firestore
+// จะเข้ามาแทนที่ทันทีที่ sync ได้ ทุกเครื่องจะเห็นล็อตเดียวกัน ──
+let _lotsCache = [];
+function setLotsCache(arr) {
+  // structuredClone (deep) ทั้งขาเข้า — กันไม่ให้ object/array ซ้อน (sources, photos ฯลฯ)
+  // เป็น reference เดียวกับของผู้เรียก ไม่งั้นถ้าใครถือ object เดิมแล้ว mutate ทีหลัง
+  // จะกระทบ _lotsCache ตรงๆ โดยไม่ผ่าน saveLots() เลย
+  const all = arr.map(l => structuredClone(l));
   all.forEach(l => {
     l.sources = migrateLotSources(l.sources);
     if (!l.receiptPhotos) l.receiptPhotos = l.receiptPhoto ? [l.receiptPhoto] : [];
   });
-  return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  _lotsCache = all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
-function saveLots(arr) { localStorage.setItem(LS_LOTS, JSON.stringify(arr)); }
+setLotsCache((() => {
+  let ls = [];
+  try { ls = JSON.parse(localStorage.getItem(LS_LOTS) || "[]"); } catch { ls = []; }
+  const bundled = window.LOTS || [];
+  if (ls.length === 0) return bundled.slice();
+  const map = new Map();
+  bundled.forEach(l => map.set(l.lotId, l));
+  ls.forEach(l => map.set(l.lotId, l));
+  return Array.from(map.values());
+})());
+// คืน "สำเนาลึก" ของ cache เสมอ (ไม่ใช่แค่ copy array) — ห้ามคืน object อ้างอิงตรงๆ
+// เพราะโค้ดหลายจุด (เช่น getLot ตามด้วยแก้ field แล้ว upsertLot กลับ) mutate object
+// ที่ได้มาโดยตรง ถ้าเป็น reference เดียวกับใน _lotsCache จะทำให้ saveLots() เทียบ
+// "ก่อน/หลัง" ผิดพลาด (เห็นค่าใหม่เป็น "ไม่มีอะไรเปลี่ยน" แล้วข้ามการเขียนขึ้น Firestore ไปเงียบๆ)
+function loadLots() { return _lotsCache.map(l => structuredClone(l)); }
+function saveLots(arr) {
+  const prevMap = new Map(_lotsCache.map(l => [l.lotId, l]));
+  const nextIds = new Set(arr.map(l => l.lotId));
+  const batch = fbDb.batch();
+  let ops = 0;
+  arr.forEach(l => {
+    const prev = prevMap.get(l.lotId);
+    if (!prev || JSON.stringify(prev) !== JSON.stringify(l)) { batch.set(fbDb.collection("lots").doc(l.lotId), l); ops++; }
+  });
+  prevMap.forEach((_, lotId) => { if (!nextIds.has(lotId)) { batch.delete(fbDb.collection("lots").doc(lotId)); ops++; } });
+  if (ops > 0) batch.commit().catch(err => console.error("บันทึกล็อตขึ้น Firestore ล้มเหลว:", err));
+  setLotsCache(arr);
+  try { localStorage.setItem(LS_LOTS, JSON.stringify(arr)); } catch {}
+}
 function getLot(lotId) { return loadLots().find(l => l.lotId === lotId); }
 function upsertLot(lot) {
   const all = loadLots();
@@ -396,8 +441,33 @@ function nextLotId() {
 }
 /* ── Field audit storage (ตรวจติดตามรายแปลง) ──
    อ้างอิงหัวข้อจาก FO-WI-QP.PC.4-01-030 Checklist การตรวจติดตามเกษตรกรสมาชิก */
-function loadAudits() { try { return JSON.parse(localStorage.getItem(LS_AUDITS) || "[]"); } catch { return []; } }
-function saveAudits(arr) { localStorage.setItem(LS_AUDITS, JSON.stringify(arr)); }
+// _auditsCache เก็บข้อมูลตรวจติดตามที่ sync มาจาก Firestore แบบ real-time
+// (ดูส่วน "Firebase live sync" ด้านล่าง) ──
+let _auditsCache = (() => {
+  try { return JSON.parse(localStorage.getItem(LS_AUDITS) || "[]"); } catch { return []; }
+})();
+function setAuditsCache(arr) {
+  // structuredClone (deep) เหตุผลเดียวกับ setLotsCache — กันไม่ให้ object/array ซ้อน
+  // (checklist, photos ฯลฯ) เป็น reference เดียวกับของผู้เรียก
+  _auditsCache = arr.map(a => structuredClone(a)).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+// คืน "สำเนาลึก" เสมอ — เหตุผลเดียวกับ loadLots() ด้านบน (กัน getAudit แล้วแก้ field
+// ตรงๆ หรือ upsertAudit/deleteAudit mutate cache จนทำให้ saveAudits() มองไม่เห็นว่ามีอะไรเปลี่ยน)
+function loadAudits() { return _auditsCache.map(a => structuredClone(a)); }
+function saveAudits(arr) {
+  const prevMap = new Map(_auditsCache.map(a => [a.id, a]));
+  const nextIds = new Set(arr.map(a => a.id));
+  const batch = fbDb.batch();
+  let ops = 0;
+  arr.forEach(a => {
+    const prev = prevMap.get(a.id);
+    if (!prev || JSON.stringify(prev) !== JSON.stringify(a)) { batch.set(fbDb.collection("audits").doc(a.id), a); ops++; }
+  });
+  prevMap.forEach((_, id) => { if (!nextIds.has(id)) { batch.delete(fbDb.collection("audits").doc(id)); ops++; } });
+  if (ops > 0) batch.commit().catch(err => console.error("บันทึกตรวจติดตามขึ้น Firestore ล้มเหลว:", err));
+  setAuditsCache(arr);
+  try { localStorage.setItem(LS_AUDITS, JSON.stringify(arr)); } catch {}
+}
 function getAudit(auditId) { return loadAudits().find(a => a.id === auditId); }
 function upsertAudit(a) {
   const all = loadAudits();
@@ -415,6 +485,89 @@ function nextAuditId() {
     return isNaN(n) ? mx : Math.max(mx, n);
   }, 0);
   return `AUDIT-${ym}-${String(maxNum + 1).padStart(4, "0")}`;
+}
+
+/* ════════════ Firebase live sync — lots / audits / users ════════════
+   ผูก onSnapshot กับทั้ง 3 collection ครั้งเดียวตอนโหลดสคริปต์ ทุกครั้งที่มี
+   การเปลี่ยนแปลง (จากเครื่องนี้หรือเครื่องอื่น) cache จะอัพเดทและ router()
+   จะ re-render หน้าปัจจุบันให้เห็นข้อมูลใหม่ทันที ข้าม re-render ของ snapshot
+   แรกเพราะหน้าเว็บจะ render เองอยู่แล้วตอนโหลดเสร็จ (กัน flash ซ้ำ) ────── */
+function attachFirestoreListener(collectionName, setCache) {
+  if (typeof fbDb === "undefined") return;
+  let first = true;
+  fbDb.collection(collectionName).onSnapshot(snap => {
+    const arr = snap.docs.map(d => d.data());
+    setCache(arr);
+    if (!first) router();
+    first = false;
+  }, err => console.error(`ฟัง ${collectionName} จาก Firestore ล้มเหลว:`, err));
+}
+attachFirestoreListener("lots", setLotsCache);
+attachFirestoreListener("audits", setAuditsCache);
+attachFirestoreListener("users", setUsersCache);
+
+/* ════════════ ย้ายข้อมูลเดิมจาก localStorage ขึ้นคลาวด์ (ครั้งเดียว) ════════════
+   สำหรับเครื่องที่เคยบันทึกล็อต/ตรวจติดตาม/ผู้ใช้ไว้ก่อนเปิดใช้ Firebase — เดินดัน
+   ข้อมูลทั้งหมดขึ้น Firestore ครั้งเดียว (แปลงรูป base64 เดิมเป็นไฟล์อัพโหลดขึ้น
+   Storage ระหว่างทางด้วย) แล้วตั้งค่า fsc_cloud_migrated กันไม่ให้ถามซ้ำ ────── */
+function dataURLtoBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(",");
+  const mime = (header.match(/data:(.*?);base64/) || [])[1] || "image/jpeg";
+  const bin = atob(base64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+function migratePhotosInPlace(obj) {
+  const uploads = [];
+  const seen = new Set();
+  const walk = v => {
+    if (!v || typeof v !== "object" || seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if ("capturedAt" in v && v.data && !v.url) {
+      const blob = dataURLtoBlob(v.data);
+      const safeName = (v.name || "photo.jpg").replace(/[^\w.\-]/g, "_");
+      const file = new File([blob], safeName, { type: blob.type });
+      const path = `photos/${new Date().toISOString().slice(0, 10)}/${uid()}-${safeName}`;
+      uploads.push(
+        fbStorage.ref(path).put(file).then(snap => snap.ref.getDownloadURL())
+          .then(url => { v.url = url; delete v.data; })
+          .catch(err => console.error("ย้ายรูปเดิมขึ้นคลาวด์ล้มเหลว:", err)),
+      );
+      return;
+    }
+    Object.values(v).forEach(walk);
+  };
+  walk(obj);
+  return Promise.all(uploads);
+}
+function hasUnmigratedLocalData() {
+  if (localStorage.getItem("fsc_cloud_migrated")) return false;
+  return ["fsc_lots", "fsc_audits", "fsc_users"].some(key => {
+    try { return JSON.parse(localStorage.getItem(key) || "[]").length > 0; } catch { return false; }
+  });
+}
+async function migrateLocalDataToCloud(onProgress) {
+  let lots = []; try { lots = JSON.parse(localStorage.getItem(LS_LOTS) || "[]"); } catch {}
+  let audits = []; try { audits = JSON.parse(localStorage.getItem(LS_AUDITS) || "[]"); } catch {}
+  let users = []; try { users = JSON.parse(localStorage.getItem(LS_USERS) || "[]"); } catch {}
+
+  onProgress && onProgress("กำลังอัพโหลดรูปภาพ...");
+  await Promise.all([...lots, ...audits].map(migratePhotosInPlace));
+
+  onProgress && onProgress(`กำลังบันทึกข้อมูล ${lots.length} ล็อต, ${audits.length} รายการตรวจ, ${users.length} ผู้ใช้...`);
+  const ops = [
+    ...lots.map(l => ["lots", l.lotId, l]),
+    ...audits.map(a => ["audits", a.id, a]),
+    ...users.map(u => ["users", u.username, u]),
+  ];
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = fbDb.batch();
+    ops.slice(i, i + 400).forEach(([col, id, data]) => batch.set(fbDb.collection(col).doc(id), data));
+    await batch.commit();
+  }
+  localStorage.setItem("fsc_cloud_migrated", "1");
 }
 
 /* Checklist sections 2–12 ของแบบฟอร์ม — freq: "annual" (ปีละ 1 ครั้ง) หรือ "quarterly" (4 เดือนครั้ง) */
@@ -660,22 +813,70 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 
 /* ── Photo capture with auto date/time/GPS tagging ──
    ใช้ร่วมกันหลาย feature (audit, lots) — ถ่าย/เลือกรูปแล้วแนบ วัน/เวลา/พิกัด GPS อัตโนมัติ
-   (ตาม WI: "ระบุ วัน/เวลา/พิกัด GPS ที่ถ่าย อัตโนมัติ") ถ้าเปิด location ไม่ได้ ก็ยังบันทึกรูปได้ตามปกติ */
+   (ตาม WI: "ระบุ วัน/เวลา/พิกัด GPS ที่ถ่าย อัตโนมัติ") ถ้าเปิด location ไม่ได้ ก็ยังบันทึกรูปได้ตามปกติ
+   photo.data (base64) ใช้แสดง preview ทันทีเท่านั้น — เมื่ออัพโหลดขึ้น Firebase
+   Storage เสร็จจะถูกแทนที่ด้วย photo.url แล้วลบ data ทิ้ง (กัน Firestore doc บวม/เกิน 1MB) */
 function capturePhotoWithGeo(file, callback) {
   const reader = new FileReader();
   reader.onload = () => {
-    const photo = { name: file.name, data: reader.result, capturedAt: new Date().toISOString(), lat: null, lng: null };
+    const photo = { name: file.name, data: reader.result, url: null, capturedAt: new Date().toISOString(), lat: null, lng: null };
+    const finish = () => { callback(photo); uploadPhotoToStorage(photo, file); };
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        pos => { photo.lat = pos.coords.latitude; photo.lng = pos.coords.longitude; callback(photo); },
-        () => callback(photo),
+        pos => { photo.lat = pos.coords.latitude; photo.lng = pos.coords.longitude; finish(); },
+        () => finish(),
         { timeout: 5000, maximumAge: 60000 },
       );
     } else {
-      callback(photo);
+      finish();
     }
   };
   reader.readAsDataURL(file);
+}
+/* คืนรูปที่ใช้แสดงจริง — ใช้ url จากคลาวด์ถ้ามี ไม่งั้น fallback ไป data (ตอนกำลังอัพโหลด) */
+function photoSrc(photo) { return (photo && (photo.url || photo.data)) || ""; }
+
+let _pendingPhotoUploads = 0;
+function waitForPendingPhotoUploads() {
+  if (_pendingPhotoUploads <= 0) return Promise.resolve();
+  return new Promise(resolve => {
+    const check = () => { if (_pendingPhotoUploads <= 0) resolve(); else setTimeout(check, 150); };
+    check();
+  });
+}
+/* อัพโหลดไฟล์รูปขึ้น Firebase Storage เบื้องหลัง แล้วสลับ photo.data (base64) → photo.url
+   ถ้าอัพโหลดไม่สำเร็จ (เช่นเน็ตหลุดที่จุดรับซื้อ) จะทำเครื่องหมาย _uploadFailed ไว้ให้ตอนบันทึก
+   ฟอร์มเช็คเจอแล้วเตือนผู้ใช้ แทนที่จะปล่อยให้ base64 ก้อนใหญ่หลุดเข้า Firestore เงียบๆ */
+function uploadPhotoToStorage(photo, file) {
+  if (typeof fbStorage === "undefined") return;
+  _pendingPhotoUploads++;
+  const safeName = (file.name || "photo.jpg").replace(/[^\w.\-]/g, "_");
+  const path = `photos/${new Date().toISOString().slice(0, 10)}/${uid()}-${safeName}`;
+  fbStorage.ref(path).put(file)
+    .then(snap => snap.ref.getDownloadURL())
+    .then(url => { photo.url = url; delete photo.data; })
+    .catch(err => {
+      console.error("อัพโหลดรูปขึ้น Firebase Storage ล้มเหลว:", err);
+      photo._uploadFailed = true;
+    })
+    .finally(() => { _pendingPhotoUploads--; });
+}
+/* หา photo object ที่อัพโหลดไม่สำเร็จภายใน lot/audit ที่กำลังจะบันทึก (เดินลึกทั้ง object) */
+function findFailedPhotos(obj) {
+  const failed = [];
+  const seen = new Set();
+  const walk = v => {
+    if (!v || typeof v !== "object" || seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if ("capturedAt" in v && ("data" in v || "url" in v)) {
+      if (v._uploadFailed) failed.push(v);
+      return;
+    }
+    Object.values(v).forEach(walk);
+  };
+  walk(obj);
+  return failed;
 }
 function fmtPhotoMeta(photo) {
   if (!photo) return "";
@@ -695,7 +896,7 @@ function buildPhotoPickerButton(label, getPhoto, onCapture) {
   const thumbEl = el("img", {
     class: "photo-pick-thumb",
     style: getPhoto() ? "" : "display:none",
-    src: getPhoto() ? getPhoto().data : "",
+    src: getPhoto() ? photoSrc(getPhoto()) : "",
     alt: label,
   });
   thumbEl.onclick = () => { if (thumbEl.src) window.open(thumbEl.src, "_blank"); };
@@ -707,7 +908,7 @@ function buildPhotoPickerButton(label, getPhoto, onCapture) {
       btn.classList.add("photo-pick-done");
       btn.classList.remove("btn-secondary");
       metaEl.textContent = fmtPhotoMeta(photo);
-      thumbEl.src = photo.data;
+      thumbEl.src = photoSrc(photo);
       thumbEl.style.display = "";
     });
   }
@@ -810,8 +1011,8 @@ function showCameraCaptureModal(stream, fallbackInput, onFile) {
 /* แสดงรูปที่บันทึกไว้แล้ว (read-only) เป็น thumbnail คลิกเปิดรูปเต็มในแท็บใหม่ */
 function renderPhotoThumbLink(photo, label) {
   if (!photo) return el("div", { class: "muted lot-photo-empty" }, `— ไม่มีรูป${label ? " " + label : ""} —`);
-  return el("a", { href: photo.data, target: "_blank", class: "lot-photo-thumb-link", title: fmtPhotoMeta(photo) },
-    el("img", { src: photo.data, alt: label || photo.name, class: "lot-photo-thumb-img" }),
+  return el("a", { href: photoSrc(photo), target: "_blank", class: "lot-photo-thumb-link", title: fmtPhotoMeta(photo) },
+    el("img", { src: photoSrc(photo), alt: label || photo.name, class: "lot-photo-thumb-img" }),
     el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, fmtPhotoMeta(photo))),
   );
 }
@@ -939,6 +1140,34 @@ window.addEventListener("load", async () => {
     `;
     document.body.insertBefore(banner, document.body.firstChild);
     banner.querySelector(".banner-close").onclick = () => banner.remove();
+  }
+
+  // แบนเนอร์ย้ายข้อมูลเดิมขึ้นคลาวด์ — โชว์ครั้งเดียวถ้าเครื่องนี้มีล็อต/ตรวจติดตาม/ผู้ใช้
+  // ที่บันทึกไว้ก่อนเปิดใช้ Firebase (ยังไม่เคย sync ขึ้นส่วนกลาง)
+  if (hasUnmigratedLocalData()) {
+    const banner = document.createElement("div");
+    banner.className = "file-protocol-banner";
+    banner.innerHTML = `
+      ☁️ <b>พบข้อมูลเดิมในเครื่องนี้</b> ที่ยังไม่ได้ sync ขึ้นส่วนกลาง (ล็อต/ตรวจติดตาม/ผู้ใช้)
+      <br>👉 กดอัพโหลดเพื่อให้ทุกเครื่องเห็นข้อมูลชุดนี้ด้วย
+      <button class="btn btn-small btn-primary" id="cloudMigrateBtn" style="margin:6px 8px 0 0">☁️ อัพโหลดข้อมูลเดิมขึ้นคลาวด์</button>
+      <button class="banner-close">✕</button>
+    `;
+    document.body.insertBefore(banner, document.body.firstChild);
+    banner.querySelector(".banner-close").onclick = () => banner.remove();
+    banner.querySelector("#cloudMigrateBtn").onclick = async () => {
+      const btn = banner.querySelector("#cloudMigrateBtn");
+      btn.disabled = true;
+      try {
+        await migrateLocalDataToCloud(msg => { btn.textContent = msg; });
+        btn.textContent = "✅ อัพโหลดสำเร็จ";
+        setTimeout(() => banner.remove(), 2000);
+      } catch (err) {
+        console.error("ย้ายข้อมูลเดิมขึ้นคลาวด์ล้มเหลว:", err);
+        btn.disabled = false;
+        btn.textContent = "❌ ล้มเหลว — ลองอีกครั้ง";
+      }
+    };
   }
 
   if (!location.hash) location.hash = "#/dashboard";
@@ -3972,12 +4201,19 @@ function renderLotForm(params) {
   });
 
   // ── Save ──
-  form.onsubmit = e => {
+  form.onsubmit = async e => {
     e.preventDefault();
     if (sources.length === 0) {
       alert("⚠️ กรุณาเพิ่มแปลงต้นทางอย่างน้อย 1 แปลง");
       return;
     }
+    // รอรูปที่ยังอัพโหลดขึ้นคลาวด์ไม่เสร็จก่อนบันทึก กันไม่ให้ base64 หลุดเข้า Firestore
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const submitLabel = submitBtn ? submitBtn.textContent : "";
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "⏳ กำลังอัพโหลดรูป..."; }
+    await waitForPendingPhotoUploads();
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitLabel; }
+
     const data = Object.fromEntries(new FormData(form).entries());
     const lot = {
       lotId,
@@ -4013,6 +4249,11 @@ function renderLotForm(params) {
       createdAt: (editing && editing.createdAt) || Date.now(),
       updatedAt: Date.now(),
     };
+    const failedPhotos = findFailedPhotos(lot);
+    if (failedPhotos.length > 0) {
+      alert("⚠️ มีรูป " + failedPhotos.length + " รูปอัพโหลดขึ้นคลาวด์ไม่สำเร็จ (เช็คสัญญาณอินเทอร์เน็ต) กรุณาลองถ่ายรูปที่มีปัญหาใหม่ก่อนบันทึก");
+      return;
+    }
     upsertLot(lot);
     location.hash = `#/lot/${encodeURIComponent(lot.lotId)}`;
   };
@@ -4549,7 +4790,7 @@ function buildAuditPhotoWidget(sectionId, photos, label) {
     gallery.innerHTML = "";
     photos[sectionId].forEach((p, i) => {
       gallery.append(el("div", { class: "audit-photo-thumb" },
-        el("img", { src: p.data, alt: p.name }),
+        el("img", { src: photoSrc(p), alt: p.name }),
         el("div", { class: "audit-photo-meta" }, fmtPhotoMeta(p)),
         el("button", {
           type: "button", class: "audit-photo-remove", title: "ลบรูปนี้",
@@ -4834,9 +5075,16 @@ function renderAuditForm(params) {
   $("#auditPrintBtn").onclick = () => window.print();
   $("#auditCancelBtn").onclick = () => { location.hash = "#/audits"; };
 
-  form.onsubmit = e => {
+  form.onsubmit = async e => {
     e.preventDefault();
     if (!selectedPlot) { alert("⚠️ กรุณาเลือกแปลงที่จะตรวจก่อนบันทึก"); return; }
+
+    // รอรูปที่ยังอัพโหลดขึ้นคลาวด์ไม่เสร็จก่อนบันทึก กันไม่ให้ base64 หลุดเข้า Firestore
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const submitLabel = submitBtn ? submitBtn.textContent : "";
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "⏳ กำลังอัพโหลดรูป..."; }
+    await waitForPendingPhotoUploads();
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitLabel; }
 
     // ── เตือนถ้ากิจกรรมที่ต้องถ่ายรูป (PPE พ่นสารเคมี/ตัดหญ้า) ถูกตอบว่ามีการทำกิจกรรม (ผ่าน/ไม่ผ่าน) แต่ยังไม่แนบรูป ──
     const checklistNow = readAuditChecklistFromDOM($("#auditChecklistSections"));
@@ -4876,6 +5124,11 @@ function renderAuditForm(params) {
       createdAt: editing ? existing.createdAt : Date.now(),
       updatedAt: Date.now(),
     };
+    const failedPhotos = findFailedPhotos(audit);
+    if (failedPhotos.length > 0) {
+      alert("⚠️ มีรูป " + failedPhotos.length + " รูปอัพโหลดขึ้นคลาวด์ไม่สำเร็จ (เช็คสัญญาณอินเทอร์เน็ต) กรุณาลองถ่ายรูปที่มีปัญหาใหม่ก่อนบันทึก");
+      return;
+    }
     upsertAudit(audit);
     location.hash = "#/audits";
   };
