@@ -891,19 +891,14 @@ function fmtPhotoMeta(photo) {
   return `${dateStr} · ${gps}`;
 }
 /* ปุ่มถ่าย/แนบรูป 1 ตำแหน่ง (single-slot) — แสดง ✅ เมื่อมีรูปแล้ว, คลิกซ้ำเพื่อถ่ายใหม่ (แทนที่รูปเดิม) */
-/* galleryMode: true — ปุ่ม "แนบรูป" ไม่บังคับเปิดกล้อง ให้เลือกจาก
-   คลังภาพหรือถ่ายใหม่ก็ได้ (ผ่านตัวเลือกของเครื่องเอง) ต่างจากโหมดปกติที่จะ
-   พยายามเปิดกล้องในหน้าเว็บก่อนเสมอ (openCameraCapture) */
+/* opts.galleryMode: true — ปุ่มเดียว ไม่บังคับเปิดกล้อง ให้เลือกจากคลังภาพหรือถ่ายใหม่
+   ก็ได้ผ่านตัวเลือกของเครื่องเอง (ต่างจากปกติที่พยายามเปิดกล้องในหน้าเว็บก่อนเสมอ)
+   opts.landscape: true — โหมดกล้อง (openCameraCapture) ขอเฟรมแนวนอน เหมาะกับถ่ายเอกสาร
+   opts.dualMode: true — แสดง 2 ปุ่ม "ถ่ายรูป" (ใช้ landscape ได้) + "เลือกจากคลังภาพ" แยกกัน
+   ใช้ตอนต้องการทั้งบังคับแนวนอนตอนถ่าย และยังเลือกจากคลังภาพได้ด้วย */
 function buildPhotoPickerButton(label, getPhoto, onCapture, opts) {
   const galleryMode = !!(opts && opts.galleryMode);
-  const inputAttrs = { type: "file", accept: "image/*", style: "display:none" };
-  if (!galleryMode) inputAttrs.capture = "environment";
-  const input = el("input", inputAttrs);
-  const icon = galleryMode ? "🖼️" : "📷";
-  const btn = el("button", {
-    type: "button",
-    class: "btn btn-small photo-pick-btn " + (getPhoto() ? "photo-pick-done" : "btn-secondary"),
-  }, getPhoto() ? `✅ ${label}` : `${icon} ${label}`);
+  const dualMode = !!(opts && opts.dualMode);
   const metaEl = el("span", { class: "photo-pick-meta muted" }, getPhoto() ? fmtPhotoMeta(getPhoto()) : "");
   const thumbEl = el("img", {
     class: "photo-pick-thumb",
@@ -912,49 +907,90 @@ function buildPhotoPickerButton(label, getPhoto, onCapture, opts) {
     alt: label,
   });
   thumbEl.onclick = () => openImagePreview(thumbEl.src, label);
+
+  function markDone(photo) {
+    [cameraBtnRef, galleryBtnRef].forEach(b => {
+      if (!b) return;
+      b.textContent = `✅ ${label}`;
+      b.classList.add("photo-pick-done");
+      b.classList.remove("btn-secondary");
+    });
+    metaEl.textContent = fmtPhotoMeta(photo);
+    thumbEl.src = photoSrc(photo);
+    thumbEl.style.display = "";
+  }
   function handleFile(f) {
     if (!f) return;
-    capturePhotoWithGeo(f, photo => {
-      onCapture(photo);
-      btn.textContent = `✅ ${label}`;
-      btn.classList.add("photo-pick-done");
-      btn.classList.remove("btn-secondary");
-      metaEl.textContent = fmtPhotoMeta(photo);
-      thumbEl.src = photoSrc(photo);
-      thumbEl.style.display = "";
-    });
+    capturePhotoWithGeo(f, photo => { onCapture(photo); markDone(photo); });
   }
-  btn.onclick = () => { galleryMode ? input.click() : openCameraCapture(input, handleFile); };
-  input.addEventListener("change", () => {
-    handleFile(input.files[0]);
-    input.value = "";
-  });
-  return el("span", { class: "photo-pick-wrap" }, thumbEl, btn, metaEl, input);
+
+  function makeInput(forceGallery) {
+    const attrs = { type: "file", accept: "image/*", style: "display:none" };
+    if (!forceGallery) attrs.capture = "environment";
+    const input = el("input", attrs);
+    input.addEventListener("change", () => { handleFile(input.files[0]); input.value = ""; });
+    return input;
+  }
+
+  let cameraBtnRef = null, galleryBtnRef = null;
+
+  if (dualMode) {
+    const camInput = makeInput(false);
+    const galInput = makeInput(true);
+    cameraBtnRef = el("button", {
+      type: "button", class: "btn btn-small photo-pick-btn " + (getPhoto() ? "photo-pick-done" : "btn-secondary"),
+    }, getPhoto() ? `✅ ${label}` : `📷 ถ่ายรูป`);
+    galleryBtnRef = el("button", {
+      type: "button", class: "btn btn-small photo-pick-btn " + (getPhoto() ? "photo-pick-done" : "btn-secondary"),
+    }, getPhoto() ? `✅ ${label}` : `🖼️ เลือกจากคลังภาพ`);
+    cameraBtnRef.onclick = () => openCameraCapture(camInput, handleFile, opts);
+    galleryBtnRef.onclick = () => galInput.click();
+    return el("span", { class: "photo-pick-wrap" }, thumbEl, cameraBtnRef, galleryBtnRef, metaEl, camInput, galInput);
+  }
+
+  const input = makeInput(galleryMode);
+  const icon = galleryMode ? "🖼️" : "📷";
+  cameraBtnRef = el("button", {
+    type: "button",
+    class: "btn btn-small photo-pick-btn " + (getPhoto() ? "photo-pick-done" : "btn-secondary"),
+  }, getPhoto() ? `✅ ${label}` : `${icon} ${label}`);
+  cameraBtnRef.onclick = () => { galleryMode ? input.click() : openCameraCapture(input, handleFile, opts); };
+  return el("span", { class: "photo-pick-wrap" }, thumbEl, cameraBtnRef, metaEl, input);
 }
 
 /* ── กล้องถ่ายรูปในหน้าเว็บ — เปิดกล้องหลังของอุปกรณ์โดยตรง ความละเอียดสูง คุณภาพ JPEG สูง ──
    ใช้ getUserMedia แทนการพึ่ง <input capture> เพียงอย่างเดียว เพื่อควบคุมความละเอียด/คุณภาพได้
    ถ้าเปิดกล้องไม่ได้ (permission ปฏิเสธ, ไม่รองรับ, ไม่ใช่ secure context ฯลฯ) fallback ไปที่
    input[type=file capture=environment] เดิม ซึ่ง OS จะเปิดแอปกล้องให้แทน */
-function openCameraCapture(fallbackInput, onFile) {
+/* opts.landscape: true — สำหรับถ่ายเอกสารแนวยาว (ใบเสร็จ/ใบปิดรถ) ขอกล้องเป็นแนวนอน
+   (aspectRatio 16:9) พร้อมกรอบไกด์ + คำแนะนำให้หมุนมือถือ — aspectRatio เป็นแค่ hint
+   ให้กล้อง ถ้าถือมือถือแนวตั้งภาพอาจยังออกมาแนวตั้งอยู่ จึงต้องมีกรอบไกด์ช่วยเตือน */
+function openCameraCapture(fallbackInput, onFile, opts) {
   if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || !window.isSecureContext) {
     fallbackInput.click();
     return;
   }
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } },
-    audio: false,
-  }).then(stream => {
-    showCameraCaptureModal(stream, fallbackInput, onFile);
+  const landscape = !!(opts && opts.landscape);
+  const videoConstraints = { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } };
+  if (landscape) videoConstraints.aspectRatio = { ideal: 16 / 9 };
+  navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false }).then(stream => {
+    showCameraCaptureModal(stream, fallbackInput, onFile, opts);
   }).catch(() => {
     fallbackInput.click();
   });
 }
-function showCameraCaptureModal(stream, fallbackInput, onFile) {
-  const video = el("video", { autoplay: true, playsinline: true, muted: true, class: "camera-modal-video" });
+function showCameraCaptureModal(stream, fallbackInput, onFile, opts) {
+  const landscape = !!(opts && opts.landscape);
+  const video = el("video", {
+    autoplay: true, playsinline: true, muted: true,
+    class: "camera-modal-video" + (landscape ? " camera-modal-video-landscape" : ""),
+  });
   video.srcObject = stream;
   const previewImg = el("img", { class: "camera-modal-preview", style: "display:none" });
-  const hint = el("div", { class: "camera-modal-hint" }, "จัดกล้องให้อยู่ในกรอบ แล้วกดถ่ายรูป — ความละเอียดสูงสุดที่กล้องรองรับ");
+  const hint = el("div", { class: "camera-modal-hint" },
+    landscape
+      ? "📱 หมุนมือถือเป็นแนวนอน จัดเอกสารให้เต็มกรอบ แล้วกดถ่ายรูป"
+      : "จัดกล้องให้อยู่ในกรอบ แล้วกดถ่ายรูป — ความละเอียดสูงสุดที่กล้องรองรับ");
 
   const shutterBtn = el("button", { type: "button", class: "btn btn-primary camera-shutter-btn" }, "📸 ถ่ายรูป");
   const cancelBtn = el("button", { type: "button", class: "btn btn-secondary camera-cancel-btn" }, "✕ ยกเลิก");
@@ -4043,7 +4079,7 @@ function renderLotForm(params) {
   const receiptPhotosHolder = { receipt: (editing && editing.receiptPhotos) || (editing && editing.receiptPhoto ? [editing.receiptPhoto] : []) };
   const receiptWrap = $("#receiptPhotoButton");
   receiptWrap.innerHTML = "";
-  receiptWrap.append(buildAuditPhotoWidget("receipt", receiptPhotosHolder, "🧾 แนบรูปใบเสร็จรับเงิน (แนบได้หลายใบ)"));
+  receiptWrap.append(buildAuditPhotoWidget("receipt", receiptPhotosHolder, "🧾 แนบรูปใบเสร็จรับเงิน (แนบได้หลายใบ)", { landscape: true }));
 
   // ── Source plots manager — จัดกลุ่มตาม FMU (รวมแปลงย่อยเข้าด้วยกัน)
   //    แต่ละ FMU ชั่งได้หลายรอบ (weighings[]) กด "＋ เพิ่มรอบชั่ง" เพื่อเพิ่มรอบใหม่ ──
@@ -4493,7 +4529,7 @@ function renderLotDetail(params) {
       panel.append(kv, renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
     } else {
       let pendingPhoto = closure.photo || null;
-      const photoBtn = buildPhotoPickerButton("แนบรูปใบปิดรถ (POP)", () => pendingPhoto, photo => { pendingPhoto = photo; }, { galleryMode: true });
+      const photoBtn = buildPhotoPickerButton("แนบรูปใบปิดรถ (POP)", () => pendingPhoto, photo => { pendingPhoto = photo; }, { dualMode: true, landscape: true });
       const closeBtn = el("button", { type: "button", class: "btn btn-primary" }, "🔒 ยืนยันปิดรถ");
       closeBtn.onclick = () => {
         if (!pendingPhoto) { alert("⚠️ กรุณาแนบรูปใบปิดรถจากระบบ POP ก่อนปิดรถ"); return; }
@@ -4821,7 +4857,7 @@ function buildAuditItemRow(item, saved) {
 /* ── Build all checklist sections (2–12) into a container ── */
 /* ── Photo evidence widget — เฉพาะ section ที่ต้องถ่ายรูปทุกครั้งที่ทำกิจกรรม (เช่น PPE พ่นสารเคมี/ตัดหญ้า)
    photos = { [sectionId]: [{name, data(base64)}] } — เก็บสดใน closure ของ renderAuditForm ไม่ต้องอ่านจาก DOM ตอน submit */
-function buildAuditPhotoWidget(sectionId, photos, label) {
+function buildAuditPhotoWidget(sectionId, photos, label, opts) {
   photos[sectionId] = photos[sectionId] || [];
   const gallery = el("div", { class: "audit-photo-gallery" });
   const fileInput = el("input", { type: "file", accept: "image/*", capture: "environment", multiple: true, class: "audit-photo-input", style: "display:none" });
@@ -4853,7 +4889,7 @@ function buildAuditPhotoWidget(sectionId, photos, label) {
       renderGallery();
     });
   }
-  cameraBtn.onclick = () => openCameraCapture(fileInput, addFile);
+  cameraBtn.onclick = () => openCameraCapture(fileInput, addFile, opts);
   pickBtn.onclick = () => fileInput.click();
   fileInput.addEventListener("change", () => {
     [...fileInput.files].forEach(addFile);
