@@ -3085,7 +3085,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 @media print {
   @page { size: A4 portrait; margin: 0; }
   html, body { width: 210mm; height: 297mm; margin: 0 !important; padding: 0 !important; background: white !important; overflow: hidden !important; }
-  .topbar, .mainnav, .footer, .back-link, .actions-bar, .no-print, .user-chip { display: none !important; }
+  .topbar, .mainnav, .footer, .back-link, .actions-bar, .no-print, .user-chip, .sync-stale-banner { display: none !important; }
   .panel, .detail-header { box-shadow: none; border: 1px solid #ddd; }
   main { padding: 0 !important; max-width: none !important; margin: 0 !important; }
 
@@ -3232,6 +3232,16 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   #lpsWeighingPhotos.lps-photo-grid .lot-photo-thumb-img { height: 78mm; }
   #lpsWeighingPhotos.lps-photo-grid { page-break-inside: auto; }
   #lpsWeighingPhotos .lot-photo-thumb-link { page-break-inside: avoid; }
+
+  /* รูปใบเสร็จรับเงิน/ใบปิดรถ — ขยายเต็มความกว้างหน้ากระดาษ อ่านตัวเลข/ข้อความในเอกสารได้ชัด
+     ใช้ contain (ไม่ crop) เพราะเป็นภาพถ่ายเอกสาร ตัดขอบแล้วอาจเสียข้อมูลสำคัญ */
+  .lps-photo-large { display: flex; flex-direction: column; gap: 6mm; }
+  .lps-photo-large .lot-photo-thumb-link { width: 100%; page-break-inside: avoid; }
+  .lps-photo-large .lot-photo-thumb-img {
+    width: 100%; max-height: 150mm; object-fit: contain; background: #f7f7f7;
+    border: 1px solid #ccc;
+  }
+  .lps-photo-large .lot-photo-thumb-cap { font-size: 8pt; }
 
   .lps-signoff { display: flex; justify-content: space-between; margin-top: 14mm; page-break-inside: avoid; }
   .lps-sign-box { width: 30%; text-align: center; font-size: 9pt; }
