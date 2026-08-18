@@ -3243,6 +3243,11 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   }
   .lps-photo-large .lot-photo-thumb-cap { font-size: 8pt; }
 
+  /* เอกสารแนวตั้งยาว (ใบเสร็จ/POP) — หมุน 90° ให้แสดงแนวนอนเต็มความกว้างหน้ากระดาษแทน
+     ขนาดจริง (mm) คำนวณจาก JS ตามสัดส่วนภาพจริงแล้วใส่เป็น inline style */
+  .lps-photo-large .lot-photo-thumb-link.is-rotated { display: flex; justify-content: center; align-items: center; }
+  .lps-photo-large .lot-photo-thumb-img.is-rotated { transform: rotate(90deg); object-fit: contain; }
+
   .lps-signoff { display: flex; justify-content: space-between; margin-top: 14mm; page-break-inside: avoid; }
   .lps-sign-box { width: 30%; text-align: center; font-size: 9pt; }
   .lps-sign-line { border-bottom: 1px solid #333; height: 14mm; margin-bottom: 2mm; }

@@ -1093,6 +1093,31 @@ function openImagePreview(src, caption) {
   overlay.querySelector(".img-preview-close").onclick = () => overlay.remove();
   document.body.append(overlay);
 }
+/* ใช้กับ #lpsReceiptPhoto/#lpsClosurePhoto ในใบสรุปการซื้อ — เอกสารพวกนี้มักเป็นแถบยาว
+   แนวตั้ง (ใบเสร็จเครื่องพิมพ์ความร้อน/สลิป POP) ถ้าภาพที่แนบเป็นแนวตั้งจะหมุน 90°
+   ให้แสดงแนวนอนเต็มความกว้างหน้ากระดาษแทน ไม่ครอบตัดเนื้อหา (ต่างจากรูปตรวจรถ/ชั่งน้ำหนัก
+   ที่ไม่หมุน เพราะเป็นภาพถ่ายทั่วไปไม่ใช่ภาพถ่ายเอกสาร) */
+function autoRotatePrintPhoto(link) {
+  const img = link.querySelector ? link.querySelector(".lot-photo-thumb-img") : null;
+  if (!img) return;
+  const apply = () => {
+    if (!(img.naturalWidth && img.naturalHeight && img.naturalWidth < img.naturalHeight)) return;
+    // คำนวณกล่องก่อนหมุน (boxW × boxH) ให้หลังหมุน 90° กลายเป็นแนวนอนพอดีความกว้างหน้ากระดาษ
+    // (สูงหลังหมุน = boxW เดิม, กว้างหลังหมุน = boxH เดิม) จำกัดทั้งสองด้านไม่ให้ล้นหน้ากระดาษ
+    const ratio = img.naturalWidth / img.naturalHeight; // < 1 เพราะเป็นภาพแนวตั้ง
+    const W_TARGET = 170, H_CAP = 150; // มม. — ประมาณความกว้าง/สูงที่เหลือใช้ได้ในหน้า A4
+    let boxH = W_TARGET, boxW = boxH * ratio;
+    if (boxW > H_CAP) { boxW = H_CAP; boxH = boxW / ratio; }
+    img.style.width = boxW.toFixed(1) + "mm";
+    img.style.height = boxH.toFixed(1) + "mm";
+    img.style.maxWidth = "none";
+    img.style.maxHeight = "none";
+    img.classList.add("is-rotated");
+    link.classList.add("is-rotated");
+    link.style.height = boxW.toFixed(1) + "mm"; // เผื่อพื้นที่แนวตั้งให้พอดีกับภาพหลังตะแคง
+  };
+  if (img.complete) apply(); else img.addEventListener("load", apply);
+}
 
 /* Convert Excel serial date → readable date if it looks like one */
 function fmtDate(v) {
@@ -4657,11 +4682,15 @@ function renderLotDetail(params) {
       weighingPhotosTitle.style.display = "none";
     }
 
-    // 3. ใบเสร็จรับเงิน (แนบได้หลายใบ)
+    // 3. ใบเสร็จรับเงิน (แนบได้หลายใบ) — เอกสารเป็นแถบยาวแนวตั้ง หมุนเป็นแนวนอนให้พอดีหน้ากระดาษ
     const receiptEl = $("#lpsReceiptPhoto");
     receiptEl.innerHTML = "";
     const lpsReceiptPhotos = lot.receiptPhotos && lot.receiptPhotos.length ? lot.receiptPhotos : [null];
-    lpsReceiptPhotos.forEach((p, i) => receiptEl.append(renderPhotoThumbLink(p, `ใบเสร็จรับเงิน${lpsReceiptPhotos.length > 1 ? " " + (i + 1) : ""}`)));
+    lpsReceiptPhotos.forEach((p, i) => {
+      const link = renderPhotoThumbLink(p, `ใบเสร็จรับเงิน${lpsReceiptPhotos.length > 1 ? " " + (i + 1) : ""}`);
+      autoRotatePrintPhoto(link);
+      receiptEl.append(link);
+    });
 
     // 4. ปิดรถ
     const closure = lot.closure || {};
@@ -4673,7 +4702,9 @@ function renderLotDetail(params) {
     }
     const closurePhotoEl = $("#lpsClosurePhoto");
     closurePhotoEl.innerHTML = "";
-    closurePhotoEl.append(renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
+    const closureLink = renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)");
+    autoRotatePrintPhoto(closureLink);
+    closurePhotoEl.append(closureLink);
 
     // หมายเหตุ
     const notesSection = $("#lpsNotesSection");
