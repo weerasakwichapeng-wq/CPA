@@ -4136,7 +4136,7 @@ function renderLotForm(params) {
           el("td", null,
             buildPhotoPickerButton("ตาชั่ง", () => w.scalePhoto, photo => { w.scalePhoto = photo; }),
             el("br"),
-            buildPhotoPickerButton("ยาง", () => w.rubberPhoto, photo => { w.rubberPhoto = photo; }, { galleryMode: true }),
+            buildPhotoPickerButton("แนบรูป", () => w.rubberPhoto, photo => { w.rubberPhoto = photo; }, { galleryMode: true }),
           ),
           el("td", null, el("button", {
             type: "button", class: "btn btn-small btn-secondary",
