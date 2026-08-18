@@ -808,6 +808,11 @@ function fmtMoney(n) {
   const v = Number(n) || 0;
   return v.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+/* น้ำหนักสุทธิของรอบชั่ง = น้ำหนักที่ชั่ง - น้ำหนักภาชนะบรรจุที่หัก — ใช้คำนวณราคา/DRC/โควต้าทุกจุด
+   (ไม่ใช่แค่แสดงผล) กันติดลบด้วย Math.max ในกรณีกรอกน้ำหนักภาชนะเกินน้ำหนักที่ชั่งโดยพลาด */
+function netWeightKg(w) {
+  return Math.max(0, (Number(w && w.weightKg) || 0) - (Number(w && w.containerWeightKg) || 0));
+}
 function safe(s) { return (s == null || s === "") ? "-" : s; }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
@@ -3482,7 +3487,7 @@ function renderTrace() {
       el("th", null, "น้ำหนัก"), el("th", null, "%"), el("th", null, "ใบชั่ง"), el("th", null, ""))));
     const tb = el("tbody");
     lot.sources.forEach((g, i) => {
-      const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+      const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
       const pct = t.totalWeightKg ? (groupWeight / t.totalWeightKg) * 100 : 0;
       const slips = (g.weighings || []).map(w => w.weighSlipNo).filter(Boolean).join(", ");
       tb.append(el("tr", null,
@@ -3841,8 +3846,9 @@ function calcLotTotals(lot) {
   (lot.sources || []).forEach(g => {
     plotCount += (g.plots || []).length;
     (g.weighings || []).forEach(w => {
-      totalWeightKg += Number(w.weightKg) || 0;
-      totalAmount += (Number(w.weightKg) || 0) * (Number(w.pricePerKg) || 0);
+      const net = netWeightKg(w);
+      totalWeightKg += net;
+      totalAmount += net * (Number(w.pricePerKg) || 0);
     });
   });
   const totalDrcKg = totalWeightKg * drcPct;
@@ -4024,7 +4030,7 @@ function renderLotForm(params) {
   })) : [];
 
   function newWeighing(defaultPrice) {
-    return { tapperName: "", weightKg: "", pricePerKg: defaultPrice || "", weighSlipNo: "", scalePhoto: null, rubberPhoto: null };
+    return { tapperName: "", weightKg: "", containerWeightKg: "", pricePerKg: defaultPrice || "", weighSlipNo: "", scalePhoto: null, rubberPhoto: null };
   }
 
   // อัพเดทยอดรวมท้ายตาราง — เรียกทุกครั้งที่ตัวเลขเปลี่ยน โดยไม่รื้อ DOM ของแถว/ช่องกรอกใดๆ
@@ -4034,7 +4040,7 @@ function renderLotForm(params) {
     sources.forEach(g => {
       totalPlots += (g.plots || []).length;
       (g.weighings || []).forEach(w => {
-        const weight = Number(w.weightKg) || 0;
+        const weight = netWeightKg(w);
         totalW += weight;
         totalD += weight * drcPct;
         totalAmt += weight * (Number(w.pricePerKg) || 0);
@@ -4071,7 +4077,7 @@ function renderLotForm(params) {
       if (g.weighings.length === 0) {
         tbody.append(el("tr", null,
           groupCell,
-          el("td", { colspan: 8, class: "muted" }, "— ยังไม่มีรอบชั่ง กด \"＋ เพิ่มรอบชั่ง\" —"),
+          el("td", { colspan: 9, class: "muted" }, "— ยังไม่มีรอบชั่ง กด \"＋ เพิ่มรอบชั่ง\" —"),
         ));
         return;
       }
@@ -4080,10 +4086,10 @@ function renderLotForm(params) {
         // ช่อง "ยอดเงิน" และ "DRC แห้ง" อัพเดทสดตอนพิมพ์ — แก้เฉพาะ textContent ของช่องนี้เท่านั้น
         // ไม่เรียก renderSources() ซ้ำ เพราะจะรื้อ <input> ทั้งตารางทิ้งแล้วสร้างใหม่ ทำให้ช่องกรอก
         // เสีย focus พิมพ์เลขต่อเนื่องไม่ได้ (ต้องคลิกใหม่ทุกตัวอักษร)
-        const amountCell = el("td", null, fmtMoney((Number(w.weightKg) || 0) * (Number(w.pricePerKg) || 0)));
-        const dryCell = el("td", null, fmtNum((Number(w.weightKg) || 0) * (Number(form.elements.drcPercent.value) || 65) / 100, 2));
+        const amountCell = el("td", null, fmtMoney(netWeightKg(w) * (Number(w.pricePerKg) || 0)));
+        const dryCell = el("td", null, fmtNum(netWeightKg(w) * (Number(form.elements.drcPercent.value) || 65) / 100, 2));
         function updateRowCalc() {
-          const weight = Number(w.weightKg) || 0;
+          const weight = netWeightKg(w);
           const price = Number(w.pricePerKg) || 0;
           amountCell.textContent = fmtMoney(weight * price);
           dryCell.textContent = fmtNum(weight * (Number(form.elements.drcPercent.value) || 65) / 100, 2);
@@ -4096,6 +4102,11 @@ function renderLotForm(params) {
           el("td", null, el("input", {
             type: "text", value: w.tapperName || "", placeholder: "ชื่อคนกรีด",
             style: "width:130px", oninput: e => { w.tapperName = e.target.value; },
+          })),
+          el("td", null, el("input", {
+            type: "number", step: "0.01", value: w.containerWeightKg || "",
+            style: "width:80px", title: "น้ำหนักภาชนะบรรจุที่หักออกจากน้ำหนักที่ชั่ง",
+            oninput: e => { w.containerWeightKg = e.target.value; updateRowCalc(); },
           })),
           el("td", null, el("input", {
             type: "number", step: "0.01", value: w.weightKg || "",
@@ -4241,7 +4252,8 @@ function renderLotForm(params) {
         fscArea: g.fscArea || 0,
         weighings: (g.weighings || []).map(w => ({
           tapperName: w.tapperName || "",
-          weightKg: Number(w.weightKg) || 0, pricePerKg: Number(w.pricePerKg) || 0,
+          weightKg: Number(w.weightKg) || 0, containerWeightKg: Number(w.containerWeightKg) || 0,
+          pricePerKg: Number(w.pricePerKg) || 0,
           weighSlipNo: w.weighSlipNo || "",
           scalePhoto: w.scalePhoto || null, rubberPhoto: w.rubberPhoto || null,
         })),
@@ -4340,7 +4352,7 @@ function renderLotDetail(params) {
       const dq = Number(getQuotaFor(pr).deliveryPerRound) || 0;
       if (dq > 0) { deliveryQuota += dq; hasQuotaData = true; }
     });
-    const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+    const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
     const overQuota = hasQuotaData && groupWeight > deliveryQuota;
     if (overQuota) anyOverQuota = true;
     const groupCell = el("td", { rowspan: Math.max((g.weighings || []).length, 1) },
@@ -4358,17 +4370,19 @@ function renderLotDetail(params) {
     );
     const weighings = g.weighings && g.weighings.length ? g.weighings : [];
     if (!weighings.length) {
-      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 8, class: "muted" }, "— ไม่มีรอบชั่ง —")));
+      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 9, class: "muted" }, "— ไม่มีรอบชั่ง —")));
       return;
     }
     weighings.forEach((w, wi) => {
-      const dry = (Number(w.weightKg) || 0) * (Number(lot.drcPercent) / 100);
-      const pct = totals.totalWeightKg ? (Number(w.weightKg) / totals.totalWeightKg) * 100 : 0;
-      const amount = (Number(w.weightKg) || 0) * (Number(w.pricePerKg) || 0);
+      const net = netWeightKg(w);
+      const dry = net * (Number(lot.drcPercent) / 100);
+      const pct = totals.totalWeightKg ? (net / totals.totalWeightKg) * 100 : 0;
+      const amount = net * (Number(w.pricePerKg) || 0);
       const tr = el("tr", { class: overQuota ? "row-over-quota" : "" });
       if (wi === 0) tr.append(groupCell);
       tr.append(
         el("td", null, safe(w.tapperName)),
+        el("td", null, fmtNum(w.containerWeightKg, 2)),
         el("td", null, fmtNum(w.weightKg, 2)),
         el("td", null, fmtNum(pct, 1) + "%"),
         el("td", null, fmtMoney(w.pricePerKg)),
@@ -4407,7 +4421,7 @@ function renderLotDetail(params) {
 
   const polys = [];
   lot.sources.forEach(g => {
-    const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+    const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
     (g.plots || []).forEach(plotName => {
       const p = PRODUCTIVE.find(p => p.name === plotName);
       if (p) {
@@ -4512,7 +4526,7 @@ function renderLotDetail(params) {
         const dq = Number(getQuotaFor(pr).deliveryPerRound) || 0;
         if (dq > 0) { deliveryQuota += dq; hasQuotaData = true; }
       });
-      const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+      const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
       const overQuota = hasQuotaData && groupWeight > deliveryQuota;
       const weighings = g.weighings && g.weighings.length ? g.weighings : [];
       const rowspan = Math.max(weighings.length, 1);
@@ -4523,16 +4537,18 @@ function renderLotDetail(params) {
       const quotaCell = el("td", { rowspan, class: overQuota ? "lps-quota-bad" : "" },
         hasQuotaData ? (overQuota ? `⚠️ เกิน (${fmtMoney(deliveryQuota)})` : `ปกติ (${fmtMoney(deliveryQuota)})`) : "-");
       if (!weighings.length) {
-        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 6 }, "ไม่มีรอบชั่ง"), quotaCell));
+        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 7 }, "ไม่มีรอบชั่ง"), quotaCell));
         return;
       }
       weighings.forEach((w, wi) => {
-        const dry = (Number(w.weightKg) || 0) * (Number(lot.drcPercent) / 100);
-        const amount = (Number(w.weightKg) || 0) * (Number(w.pricePerKg) || 0);
+        const net = netWeightKg(w);
+        const dry = net * (Number(lot.drcPercent) / 100);
+        const amount = net * (Number(w.pricePerKg) || 0);
         const tr = el("tr", { class: overQuota ? "lps-over-quota" : "" });
         if (wi === 0) tr.append(groupCell);
         tr.append(
           el("td", null, safe(w.tapperName)),
+          el("td", null, fmtNum(w.containerWeightKg, 2)),
           el("td", null, fmtNum(w.weightKg, 2)),
           el("td", null, fmtMoney(w.pricePerKg)),
           el("td", null, fmtMoney(amount)),
@@ -4550,6 +4566,7 @@ function renderLotDetail(params) {
     srcTf.innerHTML = "";
     srcTf.append(el("tr", { class: "lps-total-row" },
       el("td", { colspan: 2 }, "รวมทั้งหมด"),
+      el("td", null, ""),
       el("td", null, fmtNum(totals.totalWeightKg, 2)),
       el("td", null, ""),
       el("td", null, fmtMoney(totals.totalAmount)),
@@ -4624,7 +4641,7 @@ function renderLotDetail(params) {
 function buildLotSourceKML(lot) {
   const placemarks = [];
   lot.sources.forEach(g => {
-    const groupWeight = (g.weighings || []).reduce((s, w) => s + (Number(w.weightKg) || 0), 0);
+    const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
     (g.plots || []).forEach(plotName => {
       let coords = null;
       const p = PRODUCTIVE.find(p => p.name === plotName);
