@@ -1015,13 +1015,24 @@ function showCameraCaptureModal(stream, fallbackInput, onFile, opts) {
   overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
 
   // ── ถ่ายรูป → หยุดที่หน้าพรีวิว ให้ดูภาพก่อนตัดสินใจใช้รูปนี้หรือถ่ายใหม่ ──
+  // โหมด landscape: ตัดภาพให้ตรงกับกรอบไกด์ 16:9 ที่เห็นตอนถ่ายเป๊ะๆ (crop กลางภาพ
+  // เหมือน object-fit:cover ที่กรอบไกด์ใช้แสดงผล) ไม่ใช่แค่ขอกล้องเฉยๆ แล้วเก็บภาพเต็มเฟรมเดิม
   shutterBtn.onclick = () => {
     const track = stream.getVideoTracks()[0];
     const settings = track.getSettings ? track.getSettings() : {};
+    const srcW = settings.width || video.videoWidth || 1920;
+    const srcH = settings.height || video.videoHeight || 1080;
+    let sx = 0, sy = 0, sw = srcW, sh = srcH;
+    if (landscape) {
+      const targetRatio = 16 / 9;
+      const srcRatio = srcW / srcH;
+      if (srcRatio > targetRatio) { sw = srcH * targetRatio; sx = (srcW - sw) / 2; }
+      else { sh = srcW / targetRatio; sy = (srcH - sh) / 2; }
+    }
     const canvas = document.createElement("canvas");
-    canvas.width = settings.width || video.videoWidth || 1920;
-    canvas.height = settings.height || video.videoHeight || 1080;
-    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.width = sw;
+    canvas.height = sh;
+    canvas.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(blob => {
       if (!blob) { close(); fallbackInput.click(); return; }
       capturedBlob = blob;
