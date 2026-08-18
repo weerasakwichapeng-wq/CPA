@@ -891,12 +891,19 @@ function fmtPhotoMeta(photo) {
   return `${dateStr} · ${gps}`;
 }
 /* ปุ่มถ่าย/แนบรูป 1 ตำแหน่ง (single-slot) — แสดง ✅ เมื่อมีรูปแล้ว, คลิกซ้ำเพื่อถ่ายใหม่ (แทนที่รูปเดิม) */
-function buildPhotoPickerButton(label, getPhoto, onCapture) {
-  const input = el("input", { type: "file", accept: "image/*", capture: "environment", style: "display:none" });
+/* galleryMode: true — ปุ่ม "แนบรูป" ไม่บังคับเปิดกล้อง ให้เลือกจาก
+   คลังภาพหรือถ่ายใหม่ก็ได้ (ผ่านตัวเลือกของเครื่องเอง) ต่างจากโหมดปกติที่จะ
+   พยายามเปิดกล้องในหน้าเว็บก่อนเสมอ (openCameraCapture) */
+function buildPhotoPickerButton(label, getPhoto, onCapture, opts) {
+  const galleryMode = !!(opts && opts.galleryMode);
+  const inputAttrs = { type: "file", accept: "image/*", style: "display:none" };
+  if (!galleryMode) inputAttrs.capture = "environment";
+  const input = el("input", inputAttrs);
+  const icon = galleryMode ? "🖼️" : "📷";
   const btn = el("button", {
     type: "button",
     class: "btn btn-small photo-pick-btn " + (getPhoto() ? "photo-pick-done" : "btn-secondary"),
-  }, getPhoto() ? `✅ ${label}` : `📷 ${label}`);
+  }, getPhoto() ? `✅ ${label}` : `${icon} ${label}`);
   const metaEl = el("span", { class: "photo-pick-meta muted" }, getPhoto() ? fmtPhotoMeta(getPhoto()) : "");
   const thumbEl = el("img", {
     class: "photo-pick-thumb",
@@ -917,7 +924,7 @@ function buildPhotoPickerButton(label, getPhoto, onCapture) {
       thumbEl.style.display = "";
     });
   }
-  btn.onclick = () => openCameraCapture(input, handleFile);
+  btn.onclick = () => { galleryMode ? input.click() : openCameraCapture(input, handleFile); };
   input.addEventListener("change", () => {
     handleFile(input.files[0]);
     input.value = "";
@@ -4129,7 +4136,7 @@ function renderLotForm(params) {
           el("td", null,
             buildPhotoPickerButton("ตาชั่ง", () => w.scalePhoto, photo => { w.scalePhoto = photo; }),
             el("br"),
-            buildPhotoPickerButton("ยาง", () => w.rubberPhoto, photo => { w.rubberPhoto = photo; }),
+            buildPhotoPickerButton("ยาง", () => w.rubberPhoto, photo => { w.rubberPhoto = photo; }, { galleryMode: true }),
           ),
           el("td", null, el("button", {
             type: "button", class: "btn btn-small btn-secondary",
