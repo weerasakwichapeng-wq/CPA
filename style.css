@@ -3467,5 +3467,39 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 .src-group-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .lot-photo-cell .lot-photo-thumb-cap { display: none; }
 
+/* Overlay ดูรูปเต็มจอ — ใช้แทน window.open()/target=_blank เพราะรูปที่ยังอัพโหลด
+   ขึ้นคลาวด์ไม่เสร็จเป็น data: URI ซึ่งเบราว์เซอร์บล็อกไม่ให้เปิดแท็บใหม่ */
+.img-preview-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 9999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  cursor: zoom-out;
+}
+.img-preview-img {
+  max-width: min(92vw, 900px);
+  max-height: 78vh;
+  border-radius: 8px;
+  cursor: default;
+}
+.img-preview-caption {
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  cursor: default;
+}
+.img-preview-close {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
 tr.row-over-quota { background: #ffebee; }
 .quota-warn-note { color: #b71c1c; font-weight: 600; }

@@ -911,7 +911,7 @@ function buildPhotoPickerButton(label, getPhoto, onCapture, opts) {
     src: getPhoto() ? photoSrc(getPhoto()) : "",
     alt: label,
   });
-  thumbEl.onclick = () => { if (thumbEl.src) window.open(thumbEl.src, "_blank"); };
+  thumbEl.onclick = () => openImagePreview(thumbEl.src, label);
   function handleFile(f) {
     if (!f) return;
     capturePhotoWithGeo(f, photo => {
@@ -1023,10 +1023,28 @@ function showCameraCaptureModal(stream, fallbackInput, onFile) {
 /* แสดงรูปที่บันทึกไว้แล้ว (read-only) เป็น thumbnail คลิกเปิดรูปเต็มในแท็บใหม่ */
 function renderPhotoThumbLink(photo, label) {
   if (!photo) return el("div", { class: "muted lot-photo-empty" }, `— ไม่มีรูป${label ? " " + label : ""} —`);
-  return el("a", { href: photoSrc(photo), target: "_blank", class: "lot-photo-thumb-link", title: fmtPhotoMeta(photo) },
-    el("img", { src: photoSrc(photo), alt: label || photo.name, class: "lot-photo-thumb-img" }),
+  const src = photoSrc(photo);
+  const link = el("a", { href: src, class: "lot-photo-thumb-link", title: fmtPhotoMeta(photo) },
+    el("img", { src, alt: label || photo.name, class: "lot-photo-thumb-img" }),
     el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, fmtPhotoMeta(photo))),
   );
+  // เปิดรูปแบบ in-page overlay แทนแท็บใหม่ — window.open()/target=_blank ไปที่ data: URI
+  // (รูปที่ยังอัพโหลดขึ้นคลาวด์ไม่เสร็จ) ถูกเบราว์เซอร์บล็อกจนได้แท็บเปล่า
+  link.onclick = e => { e.preventDefault(); openImagePreview(src, label); };
+  return link;
+}
+/* Overlay แสดงรูปเต็มจอ ใช้แทน window.open()/target=_blank ทุกจุด — ใช้ได้ทั้ง data: URI
+   (ตอนรูปกำลังอัพโหลด) และ URL จริงจาก Storage โดยไม่โดนเบราว์เซอร์บล็อกแท็บใหม่ */
+function openImagePreview(src, caption) {
+  if (!src) return;
+  const overlay = el("div", { class: "img-preview-overlay" },
+    el("img", { src, class: "img-preview-img", alt: caption || "" }),
+    el("button", { type: "button", class: "img-preview-close" }, "✕ ปิด"),
+  );
+  if (caption) overlay.append(el("div", { class: "img-preview-caption" }, caption));
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector(".img-preview-close").onclick = () => overlay.remove();
+  document.body.append(overlay);
 }
 
 /* Convert Excel serial date → readable date if it looks like one */
