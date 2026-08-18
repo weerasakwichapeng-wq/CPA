@@ -4493,7 +4493,7 @@ function renderLotDetail(params) {
       panel.append(kv, renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
     } else {
       let pendingPhoto = closure.photo || null;
-      const photoBtn = buildPhotoPickerButton("แนบรูปใบปิดรถ (POP)", () => pendingPhoto, photo => { pendingPhoto = photo; });
+      const photoBtn = buildPhotoPickerButton("แนบรูปใบปิดรถ (POP)", () => pendingPhoto, photo => { pendingPhoto = photo; }, { galleryMode: true });
       const closeBtn = el("button", { type: "button", class: "btn btn-primary" }, "🔒 ยืนยันปิดรถ");
       closeBtn.onclick = () => {
         if (!pendingPhoto) { alert("⚠️ กรุณาแนบรูปใบปิดรถจากระบบ POP ก่อนปิดรถ"); return; }
