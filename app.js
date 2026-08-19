@@ -1095,67 +1095,55 @@ function openImagePreview(src, caption) {
   overlay.querySelector(".img-preview-close").onclick = () => overlay.remove();
   document.body.append(overlay);
 }
-/* ใช้กับ #lpsReceiptPhoto/#lpsClosurePhoto ในใบสรุปการซื้อ — เอกสารพวกนี้มักเป็นแถบยาว
-   แนวตั้ง (ใบเสร็จเครื่องพิมพ์ความร้อน/สลิป POP) ถ้าภาพที่แนบเป็นแนวตั้งจะหมุน 90°
-   ให้แสดงแนวนอนเต็มความกว้างหน้ากระดาษแทน ไม่ครอบตัดเนื้อหา (ต่างจากรูปตรวจรถ/ชั่งน้ำหนัก
-   ที่ไม่หมุน เพราะเป็นภาพถ่ายทั่วไปไม่ใช่ภาพถ่ายเอกสาร) */
-function autoRotatePrintPhoto(link) {
-  const img = link.querySelector ? link.querySelector(".lot-photo-thumb-img") : null;
-  if (!img) return;
-  const apply = () => {
-    if (!(img.naturalWidth && img.naturalHeight && img.naturalWidth < img.naturalHeight)) return;
-    // คำนวณกล่องก่อนหมุน (boxW × boxH) ให้หลังหมุน 90° กลายเป็นแนวนอนพอดีความกว้างหน้ากระดาษ
-    // (สูงหลังหมุน = boxW เดิม, กว้างหลังหมุน = boxH เดิม) จำกัดทั้งสองด้านไม่ให้ล้นหน้ากระดาษ
-    const ratio = img.naturalWidth / img.naturalHeight; // < 1 เพราะเป็นภาพแนวตั้ง
-    const W_TARGET = 170, H_CAP = 150; // มม. — ประมาณความกว้าง/สูงที่เหลือใช้ได้ในหน้า A4
-    let boxH = W_TARGET, boxW = boxH * ratio;
-    if (boxW > H_CAP) { boxW = H_CAP; boxH = boxW / ratio; }
-    img.style.width = boxW.toFixed(1) + "mm";
-    img.style.height = boxH.toFixed(1) + "mm";
-    img.style.maxWidth = "none";
-    img.style.maxHeight = "none";
-    img.classList.add("is-rotated");
-    link.classList.add("is-rotated");
-    link.style.height = boxW.toFixed(1) + "mm"; // เผื่อพื้นที่แนวตั้งให้พอดีกับภาพหลังตะแคง
-  };
-  if (img.complete) apply(); else img.addEventListener("load", apply);
-}
-
-/* ย่อรูปให้เหลือด้านยาวสุดไม่เกิน maxDim px ก่อนพิมพ์ — รูปต้นฉบับอาจสูงถึง 4K (ถ่ายผ่านกล้อง
-   ในเว็บ) ซึ่งเกินความละเอียดที่กระดาษ A4 ต้องการมาก ทำให้ "พิมพ์ → บันทึกเป็น PDF" ได้ไฟล์ใหญ่
-   เกินจำเป็น ถ้าย่อไม่ได้ (เช่น cross-origin แล้ว canvas ถูก taint) จะคืนรูปต้นฉบับแทนเงียบๆ
-   ไม่ทำให้พิมพ์พัง */
-function downscaleImageForPrint(src, maxDim, quality) {
+/* ประมวลผลรูปเดียวก่อนพิมพ์ — "หมุน + ย่อ" ในขั้นตอนเดียวแบบ atomic (ไม่แยกเป็น 2 ฟังก์ชัน
+   ที่ต่างคน fetch/เขียน img.src ของตัวเองแบบ async อิสระกัน) เพราะเคยพบว่าถ้าแยกกัน ตัวที่
+   เขียนเสร็จทีหลังจะเขียนทับผลของอีกตัว — เช่น รูปหมุนเสร็จ (แต่ความละเอียดเต็ม) ไปเขียนทับ
+   รูปที่ย่อไปแล้ว ทำให้ไฟล์ตอนพิมพ์ยังใหญ่อยู่ทั้งที่ย่อไปแล้ว
+   - เอกสารแนวตั้งยาว (ใบเสร็จ/POP ใน .lps-photo-large) จะหมุน 90° เป็นพิกเซลจริงผ่าน canvas
+     ก่อน (ไม่ใช้ CSS transform เพราะทำให้บางเบราว์เซอร์ rasterize ทั้งหน้าตอนบันทึกเป็น PDF)
+   - จากนั้นย่อด้านยาวสุดให้ไม่เกิน maxDim px เสมอ (รูปจากกล้องอาจสูงถึง 4K) */
+function processPrintPhoto(img, maxDim, quality) {
   return new Promise(resolve => {
-    if (!src) { resolve(src); return; }
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      let { width, height } = img;
-      if (!width || !height || (width <= maxDim && height <= maxDim)) { resolve(src); return; }
-      const scale = maxDim / Math.max(width, height);
-      width = Math.round(width * scale);
-      height = Math.round(height * scale);
+    const src = img.src;
+    if (!src) { resolve(); return; }
+    const shouldRotate = !!img.closest(".lps-photo-large");
+    const probe = new Image();
+    probe.crossOrigin = "anonymous";
+    probe.onload = () => {
       try {
-        const canvas = document.createElement("canvas");
-        canvas.width = width; canvas.height = height;
-        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality || 0.72));
-      } catch (e) {
-        resolve(src);
-      }
+        const isPortrait = probe.naturalWidth < probe.naturalHeight;
+        let source = probe, w = probe.naturalWidth, h = probe.naturalHeight;
+        if (shouldRotate && isPortrait) {
+          const rotated = document.createElement("canvas");
+          rotated.width = h; rotated.height = w;
+          const rctx = rotated.getContext("2d");
+          rctx.translate(rotated.width, 0);
+          rctx.rotate(Math.PI / 2);
+          rctx.drawImage(probe, 0, 0);
+          source = rotated; w = rotated.width; h = rotated.height;
+        }
+        if (w > maxDim || h > maxDim) {
+          const scale = maxDim / Math.max(w, h);
+          const nw = Math.round(w * scale), nh = Math.round(h * scale);
+          const scaled = document.createElement("canvas");
+          scaled.width = nw; scaled.height = nh;
+          scaled.getContext("2d").drawImage(source, 0, 0, nw, nh);
+          source = scaled;
+        } else if (source === probe) {
+          resolve(); return; // ไม่ต้องหมุนและขนาดพอดีอยู่แล้ว — ไม่ต้อง re-encode ให้เสียคุณภาพเปล่าๆ
+        }
+        img.src = source.toDataURL("image/jpeg", quality || 0.72);
+      } catch (e) { /* canvas ถูก taint (CORS) — ปล่อยรูปเดิมไว้ ดีกว่า error ตอนพิมพ์ */ }
+      resolve();
     };
-    img.onerror = () => resolve(src);
-    img.src = src;
+    probe.onerror = () => resolve();
+    probe.src = src;
   });
 }
-/* ย่อรูปทุกใบที่แสดงอยู่ใน #lotPrintSheet ตอนนี้ (เรียกครั้งเดียวตอน render เอกสารพิมพ์) */
+/* ประมวลผลรูปทุกใบที่แสดงอยู่ใน #lotPrintSheet ตอนนี้ (เรียกครั้งเดียวตอน render เอกสารพิมพ์) */
 async function downscalePrintPhotos() {
   const imgs = document.querySelectorAll("#lotPrintSheet img.lot-photo-thumb-img");
-  await Promise.all(Array.from(imgs).map(async img => {
-    const small = await downscaleImageForPrint(img.src, 1000, 0.72);
-    if (small) img.src = small;
-  }));
+  await Promise.all(Array.from(imgs).map(img => processPrintPhoto(img, 1000, 0.72)));
 }
 
 /* Convert Excel serial date → readable date if it looks like one */
@@ -4729,7 +4717,6 @@ function renderLotDetail(params) {
     const lpsReceiptPhotos = lot.receiptPhotos && lot.receiptPhotos.length ? lot.receiptPhotos : [null];
     lpsReceiptPhotos.forEach((p, i) => {
       const link = renderPhotoThumbLink(p, `ใบเสร็จรับเงิน${lpsReceiptPhotos.length > 1 ? " " + (i + 1) : ""}`);
-      autoRotatePrintPhoto(link);
       receiptEl.append(link);
     });
 
@@ -4744,7 +4731,6 @@ function renderLotDetail(params) {
     const closurePhotoEl = $("#lpsClosurePhoto");
     closurePhotoEl.innerHTML = "";
     const closureLink = renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)");
-    autoRotatePrintPhoto(closureLink);
     closurePhotoEl.append(closureLink);
 
     // หมายเหตุ
