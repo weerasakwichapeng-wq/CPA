@@ -4166,7 +4166,7 @@ function renderLotForm(params) {
   })) : [];
 
   function newWeighing(defaultPrice) {
-    return { weightKg: "", containerWeightKg: "", pricePerKg: defaultPrice || "", weighSlipNo: "", scalePhoto: null, rubberPhoto: null };
+    return { sackCount: "", weightKg: "", containerWeightKg: "", pricePerKg: defaultPrice || "", weighSlipNo: "", scalePhoto: null, rubberPhoto: null };
   }
 
   // อัพเดทยอดรวมท้ายตาราง — เรียกทุกครั้งที่ตัวเลขเปลี่ยน โดยไม่รื้อ DOM ของแถว/ช่องกรอกใดๆ
@@ -4213,7 +4213,7 @@ function renderLotForm(params) {
       if (g.weighings.length === 0) {
         tbody.append(el("tr", null,
           groupCell,
-          el("td", { colspan: 8, class: "muted" }, "— ยังไม่มีรอบชั่ง กด \"＋ เพิ่มรอบชั่ง\" —"),
+          el("td", { colspan: 9, class: "muted" }, "— ยังไม่มีรอบชั่ง กด \"＋ เพิ่มรอบชั่ง\" —"),
         ));
         return;
       }
@@ -4235,6 +4235,11 @@ function renderLotForm(params) {
         const tr = el("tr", null);
         if (wi === 0) tr.append(groupCell);
         tr.append(
+          el("td", null, el("input", {
+            type: "number", step: "1", value: w.sackCount || "",
+            style: "width:60px", placeholder: "กระสอบ",
+            oninput: e => { w.sackCount = e.target.value; },
+          })),
           el("td", null, el("input", {
             type: "number", step: "0.01", value: w.containerWeightKg || "",
             style: "width:80px", title: "น้ำหนักภาชนะบรรจุที่หักออกจากน้ำหนักที่ชั่ง",
@@ -4383,6 +4388,7 @@ function renderLotForm(params) {
         plots: [...(g.plots || [])],
         fscArea: g.fscArea || 0,
         weighings: (g.weighings || []).map(w => ({
+          sackCount: Number(w.sackCount) || 0,
           weightKg: Number(w.weightKg) || 0, containerWeightKg: Number(w.containerWeightKg) || 0,
           pricePerKg: Number(w.pricePerKg) || 0,
           weighSlipNo: w.weighSlipNo || "",
@@ -4501,7 +4507,7 @@ function renderLotDetail(params) {
     );
     const weighings = g.weighings && g.weighings.length ? g.weighings : [];
     if (!weighings.length) {
-      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 8, class: "muted" }, "— ไม่มีรอบชั่ง —")));
+      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 9, class: "muted" }, "— ไม่มีรอบชั่ง —")));
       return;
     }
     weighings.forEach((w, wi) => {
@@ -4512,6 +4518,7 @@ function renderLotDetail(params) {
       const tr = el("tr", { class: overQuota ? "row-over-quota" : "" });
       if (wi === 0) tr.append(groupCell);
       tr.append(
+        el("td", null, safe(w.sackCount)),
         el("td", null, fmtNum(w.containerWeightKg, 2)),
         el("td", null, fmtNum(w.weightKg, 2)),
         el("td", null, fmtNum(pct, 1) + "%"),
@@ -4667,7 +4674,7 @@ function renderLotDetail(params) {
       const quotaCell = el("td", { rowspan, class: overQuota ? "lps-quota-bad" : "" },
         hasQuotaData ? (overQuota ? `⚠️ เกิน (${fmtMoney(deliveryQuota)})` : `ปกติ (${fmtMoney(deliveryQuota)})`) : "-");
       if (!weighings.length) {
-        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 6 }, "ไม่มีรอบชั่ง"), quotaCell));
+        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 7 }, "ไม่มีรอบชั่ง"), quotaCell));
         return;
       }
       weighings.forEach((w, wi) => {
@@ -4677,6 +4684,7 @@ function renderLotDetail(params) {
         const tr = el("tr", { class: overQuota ? "lps-over-quota" : "" });
         if (wi === 0) tr.append(groupCell);
         tr.append(
+          el("td", null, safe(w.sackCount)),
           el("td", null, fmtNum(w.containerWeightKg, 2)),
           el("td", null, fmtNum(w.weightKg, 2)),
           el("td", null, fmtMoney(w.pricePerKg)),
@@ -4695,6 +4703,7 @@ function renderLotDetail(params) {
     srcTf.innerHTML = "";
     srcTf.append(el("tr", { class: "lps-total-row" },
       el("td", null, "รวมทั้งหมด"),
+      el("td", null, ""),
       el("td", null, ""),
       el("td", null, fmtNum(totals.totalWeightKg, 2)),
       el("td", null, ""),
