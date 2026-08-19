@@ -3085,7 +3085,11 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 @media print {
   @page { size: A4 portrait; margin: 0; }
   html, body { width: 210mm; height: 297mm; margin: 0 !important; padding: 0 !important; background: white !important; overflow: hidden !important; }
-  .topbar, .mainnav, .footer, .back-link, .actions-bar, .no-print, .user-chip, .sync-stale-banner { display: none !important; }
+  /* .detail-map (แผนที่ดาวเทียม Leaflet บนหน้าจอ) ต้องซ่อนตอนพิมพ์เสมอ ไม่ว่าจะอยู่หน้าไหน —
+     ถ้าเบราว์เซอร์พยายาม rasterize แผนที่ภาพถ่ายดาวเทียมสดๆ ลง PDF จะได้ไฟล์ใหญ่มาก
+     (พบเคสจริงว่าไฟล์ขึ้นไปหลักร้อย MB) แก้ด้วย selector ตรงๆ ไม่พึ่งพา .dash-grid-12
+     ที่ scope เฉพาะ .page-lot-detail เพียงจุดเดียว กันไว้อีกชั้นให้ชัวร์ */
+  .topbar, .mainnav, .footer, .back-link, .actions-bar, .no-print, .user-chip, .sync-stale-banner, .detail-map { display: none !important; }
   .panel, .detail-header { box-shadow: none; border: 1px solid #ddd; }
   main { padding: 0 !important; max-width: none !important; margin: 0 !important; }
 
