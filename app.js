@@ -854,19 +854,50 @@ function waitForPendingPhotoUploads() {
 /* อัพโหลดไฟล์รูปขึ้น Firebase Storage เบื้องหลัง แล้วสลับ photo.data (base64) → photo.url
    ถ้าอัพโหลดไม่สำเร็จ (เช่นเน็ตหลุดที่จุดรับซื้อ) จะทำเครื่องหมาย _uploadFailed ไว้ให้ตอนบันทึก
    ฟอร์มเช็คเจอแล้วเตือนผู้ใช้ แทนที่จะปล่อยให้ base64 ก้อนใหญ่หลุดเข้า Firestore เงียบๆ */
-function uploadPhotoToStorage(photo, file) {
+/* ย่อไฟล์รูปก่อนอัพโหลดขึ้น Storage — กล้องในเว็บถ่ายได้สูงถึง 3840×2160 และรูปจากคลังภาพ
+   มือถือมักใหญ่กว่านั้นอีก ถ้าอัพโหลดเต็มขนาดไปเลย พอเอามาใช้ตอนพิมพ์ (ต้อง fetch รูปจาก
+   Storage ข้าม origin ซึ่งโดน CORS บล็อกไม่ให้ downscale ซ้ำได้) ไฟล์ PDF จะบวมมาก
+   (พบเคสจริง ~283MB จาก 40 รูปเต็มความละเอียด) ย่อตอนอัพโหลดครั้งเดียวจบ ไม่มีปัญหา CORS
+   เพราะ file เป็น Blob ในเครื่อง ไม่ใช่ URL ข้าม origin */
+function resizeFileForUpload(file, maxDim, quality) {
+  return new Promise(resolve => {
+    if (!file.type || !file.type.startsWith("image/")) { resolve(file); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (!width || !height || (width <= maxDim && height <= maxDim)) { resolve(file); return; }
+      const scale = maxDim / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      canvas.toBlob(blob => {
+        resolve(blob ? new File([blob], file.name || "photo.jpg", { type: "image/jpeg" }) : file);
+      }, "image/jpeg", quality || 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+async function uploadPhotoToStorage(photo, file) {
   if (typeof fbStorage === "undefined") return;
   _pendingPhotoUploads++;
-  const safeName = (file.name || "photo.jpg").replace(/[^\w.\-]/g, "_");
-  const path = `photos/${new Date().toISOString().slice(0, 10)}/${uid()}-${safeName}`;
-  fbStorage.ref(path).put(file)
-    .then(snap => snap.ref.getDownloadURL())
-    .then(url => { photo.url = url; delete photo.data; })
-    .catch(err => {
-      console.error("อัพโหลดรูปขึ้น Firebase Storage ล้มเหลว:", err);
-      photo._uploadFailed = true;
-    })
-    .finally(() => { _pendingPhotoUploads--; });
+  try {
+    const upload = await resizeFileForUpload(file, 1600, 0.82);
+    const safeName = (file.name || "photo.jpg").replace(/[^\w.\-]/g, "_");
+    const path = `photos/${new Date().toISOString().slice(0, 10)}/${uid()}-${safeName}`;
+    const snap = await fbStorage.ref(path).put(upload);
+    photo.url = await snap.ref.getDownloadURL();
+    delete photo.data;
+  } catch (err) {
+    console.error("อัพโหลดรูปขึ้น Firebase Storage ล้มเหลว:", err);
+    photo._uploadFailed = true;
+  } finally {
+    _pendingPhotoUploads--;
+  }
 }
 /* หา photo object ที่อัพโหลดไม่สำเร็จภายใน lot/audit ที่กำลังจะบันทึก (เดินลึกทั้ง object) */
 function findFailedPhotos(obj) {
