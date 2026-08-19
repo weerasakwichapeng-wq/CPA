@@ -3205,11 +3205,13 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-table { width: 100%; border-collapse: collapse; font-size: 8pt; page-break-inside: auto; }
   .lps-table th, .lps-table td { border: 1px solid #cfcfcf; padding: 1.8mm 2.2mm; text-align: left; vertical-align: top; }
   .lps-table th { background: #1b5e20; color: white; font-weight: 700; text-align: center; }
-  .lps-table td:nth-child(n+3) { text-align: right; }
+  /* จัดคอลัมน์ตัวเลขชิดขวาด้วย class ตรงๆ (ไม่ใช้ :nth-child) เพราะแถวที่ 2 ขึ้นไปของแต่ละ
+     FMU ไม่มีเซลล์ rowspan (FMU/โควต้า) ทำให้ตำแหน่ง nth-child ของแต่ละคอลัมน์เลื่อนไม่ตรงกัน
+     ระหว่างแถวแรกกับแถวถัดไปของกลุ่มเดียวกัน */
+  .lps-table td.lps-num { text-align: right; }
   .lps-table tbody tr:nth-child(even) { background: #f7faf7; }
   .lps-table tr { page-break-inside: avoid; }
   .lps-table .lps-total-row { font-weight: 700; background: #e8f5e9 !important; border-top: 1.5px solid #1b5e20; }
-  .lps-table .lps-total-row td:nth-child(n+3) { text-align: right; }
   .lps-quota-bad { color: #b71c1c; font-weight: 700; }
   .lps-over-quota { background: #ffebee !important; }
 

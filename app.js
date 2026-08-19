@@ -4684,12 +4684,12 @@ function renderLotDetail(params) {
         const tr = el("tr", { class: overQuota ? "lps-over-quota" : "" });
         if (wi === 0) tr.append(groupCell);
         tr.append(
-          el("td", null, safe(w.sackCount)),
-          el("td", null, fmtNum(w.containerWeightKg, 2)),
-          el("td", null, fmtNum(w.weightKg, 2)),
-          el("td", null, fmtMoney(w.pricePerKg)),
-          el("td", null, fmtMoney(amount)),
-          el("td", null, fmtNum(dry, 2)),
+          el("td", { class: "lps-num" }, safe(w.sackCount)),
+          el("td", { class: "lps-num" }, fmtNum(w.containerWeightKg, 2)),
+          el("td", { class: "lps-num" }, fmtNum(w.weightKg, 2)),
+          el("td", { class: "lps-num" }, fmtMoney(w.pricePerKg)),
+          el("td", { class: "lps-num" }, fmtMoney(amount)),
+          el("td", { class: "lps-num" }, fmtNum(dry, 2)),
           el("td", null, safe(w.weighSlipNo)),
         );
         if (wi === 0) tr.append(quotaCell);
@@ -4705,10 +4705,10 @@ function renderLotDetail(params) {
       el("td", null, "รวมทั้งหมด"),
       el("td", null, ""),
       el("td", null, ""),
-      el("td", null, fmtNum(totals.totalWeightKg, 2)),
+      el("td", { class: "lps-num" }, fmtNum(totals.totalWeightKg, 2)),
       el("td", null, ""),
-      el("td", null, fmtMoney(totals.totalAmount)),
-      el("td", null, fmtNum(totals.totalDrcKg, 2)),
+      el("td", { class: "lps-num" }, fmtMoney(totals.totalAmount)),
+      el("td", { class: "lps-num" }, fmtNum(totals.totalDrcKg, 2)),
       el("td", { colspan: 2 }, ""),
     ));
 
