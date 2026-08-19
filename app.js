@@ -1119,6 +1119,43 @@ function autoRotatePrintPhoto(link) {
   if (img.complete) apply(); else img.addEventListener("load", apply);
 }
 
+/* ย่อรูปให้เหลือด้านยาวสุดไม่เกิน maxDim px ก่อนพิมพ์ — รูปต้นฉบับอาจสูงถึง 4K (ถ่ายผ่านกล้อง
+   ในเว็บ) ซึ่งเกินความละเอียดที่กระดาษ A4 ต้องการมาก ทำให้ "พิมพ์ → บันทึกเป็น PDF" ได้ไฟล์ใหญ่
+   เกินจำเป็น ถ้าย่อไม่ได้ (เช่น cross-origin แล้ว canvas ถูก taint) จะคืนรูปต้นฉบับแทนเงียบๆ
+   ไม่ทำให้พิมพ์พัง */
+function downscaleImageForPrint(src, maxDim, quality) {
+  return new Promise(resolve => {
+    if (!src) { resolve(src); return; }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      let { width, height } = img;
+      if (!width || !height || (width <= maxDim && height <= maxDim)) { resolve(src); return; }
+      const scale = maxDim / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality || 0.72));
+      } catch (e) {
+        resolve(src);
+      }
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
+}
+/* ย่อรูปทุกใบที่แสดงอยู่ใน #lotPrintSheet ตอนนี้ (เรียกครั้งเดียวตอน render เอกสารพิมพ์) */
+async function downscalePrintPhotos() {
+  const imgs = document.querySelectorAll("#lotPrintSheet img.lot-photo-thumb-img");
+  await Promise.all(Array.from(imgs).map(async img => {
+    const small = await downscaleImageForPrint(img.src, 1000, 0.72);
+    if (small) img.src = small;
+  }));
+}
+
 /* Convert Excel serial date → readable date if it looks like one */
 function fmtDate(v) {
   if (!v) return "-";
@@ -4713,10 +4750,23 @@ function renderLotDetail(params) {
     $("#lpsFooter").textContent = `พิมพ์เมื่อ ${new Date().toLocaleString("th-TH", { dateStyle: "long", timeStyle: "short" })} · โดย ${me.displayName || me.username || "-"} · เอกสารนี้สร้างจากระบบตรวจสอบย้อนกลับยางพารา FSC`;
   }
   renderPrintSheet();
+  // ย่อรูปทุกใบในเอกสารพิมพ์ให้เหลือความละเอียดพอสำหรับกระดาษ (ไม่ใช่ต้นฉบับ 4K) — ไฟล์ PDF ที่
+  // ได้จาก "พิมพ์ → บันทึกเป็น PDF" จะเล็กลงมาก เพราะเบราว์เซอร์ฝัง resolution จริงของรูปลงไฟล์เสมอ
+  // ไม่ว่า CSS จะย่อขนาดที่แสดงผลแค่ไหนก็ตาม จึงต้องย่อไฟล์รูปจริงๆ ก่อนพิมพ์
+  let printPhotosReady = downscalePrintPhotos();
 
   // Actions
   $("#lotEditBtn").onclick = () => { location.hash = `#/lots/new/${encodeURIComponent(lot.lotId)}`; };
-  $("#lotPrintBtn").onclick = () => window.print();
+  $("#lotPrintBtn").onclick = async () => {
+    const btn = $("#lotPrintBtn");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⏳ กำลังเตรียมรูปสำหรับพิมพ์...";
+    await printPhotosReady;
+    btn.disabled = false;
+    btn.textContent = label;
+    window.print();
+  };
   $("#lotKmlBtn").onclick = () => {
     const kml = buildLotSourceKML(lot);
     const blob = new Blob([kml], { type: "application/vnd.google-earth.kml+xml" });
