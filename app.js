@@ -432,12 +432,14 @@ function deleteLot(lotId) {
 function nextLotId() {
   const now = new Date();
   const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const monthLots = loadLots().filter(l => l.lotId && l.lotId.startsWith(`LOT-${ym}-`));
+  const prefix = `CPA-FSC-${ym}-`;
+  const monthLots = loadLots().filter(l => l.lotId && l.lotId.startsWith(prefix));
   const maxNum = monthLots.reduce((mx, l) => {
-    const n = parseInt(l.lotId.split("-")[2], 10);
+    // ใช้ slice ตามความยาว prefix แทน split("-")[2] เพราะ prefix เองมีขีดกลางอยู่แล้ว (CPA-FSC-)
+    const n = parseInt(l.lotId.slice(prefix.length), 10);
     return isNaN(n) ? mx : Math.max(mx, n);
   }, 0);
-  return `LOT-${ym}-${String(maxNum + 1).padStart(4, "0")}`;
+  return `${prefix}${String(maxNum + 1).padStart(4, "0")}`;
 }
 /* ── Field audit storage (ตรวจติดตามรายแปลง) ──
    อ้างอิงหัวข้อจาก FO-WI-QP.PC.4-01-030 Checklist การตรวจติดตามเกษตรกรสมาชิก */
