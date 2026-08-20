@@ -4800,7 +4800,7 @@ function renderLotDetail(params) {
     });
     const truckCertFileEl = $("#lpsTruckCertFile");
     truckCertFileEl.innerHTML = "";
-    truckCertFileEl.className = "lps-photo-row";
+    truckCertFileEl.className = "lps-photo-large";
     truckCertFileEl.append(renderCertFileLink(truck.fscCertFile, "ใบรับรอง FSC"));
 
     // 2. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ

@@ -3251,6 +3251,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
     border: 1px solid #ccc;
   }
   .lps-photo-large .lot-photo-thumb-cap { font-size: 8pt; }
+  .lps-photo-large .lot-doc-icon { width: 100%; height: 60mm; font-size: 36pt; border: 1px solid #ccc; }
 
   /* เอกสารแนวตั้งยาว (ใบเสร็จ/POP) ถูกหมุนพิกเซลจริงแล้วใน JS (autoRotatePrintPhoto) —
      ไม่ใช้ CSS transform เพราะทำให้ไฟล์ PDF ใหญ่ขึ้นมากในบางเบราว์เซอร์ ใช้กฎขนาดปกติ
