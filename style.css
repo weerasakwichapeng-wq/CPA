@@ -348,6 +348,7 @@ input:focus, select:focus, textarea:focus {
 }
 .data-table th:first-child { border-top-left-radius: var(--radius-lg); }
 .data-table th:last-child { border-top-right-radius: var(--radius-lg); }
+.data-table th .th-sub { display: block; font-size: 10px; font-weight: 400; opacity: 0.85; }
 .data-table td {
   padding: 11px 14px;
   border-bottom: 1px solid var(--gray-200);
