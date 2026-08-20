@@ -4166,7 +4166,7 @@ function renderLotForm(params) {
   const truckPhotoWrap = $("#truckPhotoButtons");
   truckPhotoWrap.innerHTML = "";
   [["front", "หน้ารถ"], ["side", "ข้างรถ"], ["bed", "บนกระบะรถ"]].forEach(([key, label]) => {
-    truckPhotoWrap.append(buildPhotoPickerButton(label, () => truckPhotos[key], photo => { truckPhotos[key] = photo; }));
+    truckPhotoWrap.append(buildPhotoPickerButton(label, () => truckPhotos[key], photo => { truckPhotos[key] = photo; }, { dualMode: true }));
   });
 
   // ── 6. ใบเสร็จรับเงิน — แนบได้หลายใบ ──
