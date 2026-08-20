@@ -899,6 +899,70 @@ async function uploadPhotoToStorage(photo, file) {
     _pendingPhotoUploads--;
   }
 }
+/* แนบไฟล์เอกสารทั่วไป (เช่น ใบรับรอง FSC ของรถขนส่ง) — รองรับทั้ง PDF และรูปภาพ
+   ใช้โครงสร้างเดียวกับ photo object (capturedAt/data/url) เพื่อให้ findFailedPhotos()
+   ตรวจจับไฟล์ที่อัพโหลดไม่สำเร็จได้โดยไม่ต้องแก้ logic เดิม ต่างจากรูปตรงที่ไม่ย่อขนาด
+   (PDF ย่อไม่ได้อยู่แล้ว resizeFileForUpload จะข้ามให้เอง) และไม่ขอพิกัด GPS */
+function captureCertFile(file, callback) {
+  const docObj = { name: file.name, data: null, url: null, capturedAt: new Date().toISOString(), size: file.size, type: file.type };
+  const finish = () => { callback(docObj); uploadCertFileToStorage(docObj, file); };
+  if (file.type && file.type.startsWith("image/")) {
+    const reader = new FileReader();
+    reader.onload = () => { docObj.data = reader.result; finish(); };
+    reader.readAsDataURL(file);
+  } else {
+    finish();
+  }
+}
+async function uploadCertFileToStorage(docObj, file) {
+  if (typeof fbStorage === "undefined") return;
+  _pendingPhotoUploads++;
+  try {
+    const upload = await resizeFileForUpload(file, 1600, 0.82);
+    const safeName = (file.name || "file").replace(/[^\w.\-]/g, "_");
+    const path = `photos/certificates/${new Date().toISOString().slice(0, 10)}/${uid()}-${safeName}`;
+    const snap = await fbStorage.ref(path).put(upload);
+    docObj.url = await snap.ref.getDownloadURL();
+    delete docObj.data;
+  } catch (err) {
+    console.error("อัพโหลดไฟล์ใบรับรองขึ้น Firebase Storage ล้มเหลว:", err);
+    docObj._uploadFailed = true;
+  } finally {
+    _pendingPhotoUploads--;
+  }
+}
+/* ปุ่มแนบไฟล์เอกสาร 1 ตำแหน่ง (PDF/รูปภาพ) — ต่างจาก buildPhotoPickerButton ตรงที่ไม่มีโหมดกล้อง
+   และแสดงลิงก์เปิดไฟล์แทนรูปตัวอย่าง (เพราะ PDF พรีวิวเป็นรูปธัมบ์เนลไม่ได้) */
+function buildFilePickerButton(label, getFile, onCapture) {
+  const f = getFile();
+  const metaEl = el("span", { class: "photo-pick-meta muted" }, f ? f.name + (f._uploadFailed ? " (อัพโหลดไม่สำเร็จ)" : "") : "");
+  const linkEl = el("a", { class: "photo-pick-thumb-link", target: "_blank", rel: "noopener", style: f ? "" : "display:none" }, "📄 ดูไฟล์");
+  function updateLink(file) {
+    if (!file || (!file.url && !file.data)) { linkEl.style.display = "none"; return; }
+    linkEl.href = file.url || file.data;
+    linkEl.style.display = "";
+  }
+  updateLink(f);
+  const input = el("input", { type: "file", accept: "application/pdf,image/*", style: "display:none" });
+  const btn = el("button", {
+    type: "button", class: "btn btn-small photo-pick-btn " + (f ? "photo-pick-done" : "btn-secondary"),
+  }, f ? `✅ ${label}` : `📎 ${label}`);
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    input.value = "";
+    if (!file) return;
+    captureCertFile(file, docObj => {
+      onCapture(docObj);
+      btn.textContent = `✅ ${label}`;
+      btn.classList.add("photo-pick-done");
+      btn.classList.remove("btn-secondary");
+      metaEl.textContent = docObj.name;
+      updateLink(docObj);
+    });
+  });
+  btn.onclick = () => input.click();
+  return el("span", { class: "photo-pick-wrap" }, linkEl, btn, metaEl, input);
+}
 /* หา photo object ที่อัพโหลดไม่สำเร็จภายใน lot/audit ที่กำลังจะบันทึก (เดินลึกทั้ง object) */
 function findFailedPhotos(obj) {
   const failed = [];
@@ -1112,6 +1176,25 @@ function renderPhotoThumbLink(photo, label) {
   // (รูปที่ยังอัพโหลดขึ้นคลาวด์ไม่เสร็จ) ถูกเบราว์เซอร์บล็อกจนได้แท็บเปล่า
   link.onclick = e => { e.preventDefault(); openImagePreview(src, label); };
   return link;
+}
+/* แสดงไฟล์เอกสารที่แนบไว้แล้ว (read-only) — ถ้าเป็นรูปภาพแสดง thumbnail แบบเดียวกับรูปถ่าย
+   ถ้าเป็น PDF/ไฟล์อื่นแสดงไอคอนเอกสารแทน (พรีวิวเป็นรูปธัมบ์เนลไม่ได้) คลิกเปิดไฟล์แท็บใหม่ */
+function renderCertFileLink(file, label) {
+  if (!file) return el("div", { class: "muted lot-photo-empty" }, `— ไม่มี${label || "ไฟล์"} —`);
+  const src = file.url || file.data;
+  const isImage = !!(file.type && file.type.startsWith("image/"));
+  if (isImage) {
+    const link = el("a", { href: src, class: "lot-photo-thumb-link", title: file.name },
+      el("img", { src, alt: label || file.name, class: "lot-photo-thumb-img" }),
+      el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name)),
+    );
+    link.onclick = e => { e.preventDefault(); openImagePreview(src, label); };
+    return link;
+  }
+  return el("a", { href: src, target: "_blank", rel: "noopener", class: "lot-photo-thumb-link" },
+    el("div", { class: "lot-doc-icon" }, "📄"),
+    el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name)),
+  );
 }
 /* Overlay แสดงรูปเต็มจอ ใช้แทน window.open()/target=_blank ทุกจุด — ใช้ได้ทั้ง data: URI
    (ตอนรูปกำลังอัพโหลด) และ URL จริงจาก Storage โดยไม่โดนเบราว์เซอร์บล็อกแท็บใหม่ */
@@ -4169,6 +4252,11 @@ function renderLotForm(params) {
     truckPhotoWrap.append(buildPhotoPickerButton(label, () => truckPhotos[key], photo => { truckPhotos[key] = photo; }, { dualMode: true }));
   });
 
+  let truckCertFile = (editing && editing.truck && editing.truck.fscCertFile) || null;
+  const truckCertWrap = $("#truckCertFileButton");
+  truckCertWrap.innerHTML = "";
+  truckCertWrap.append(buildFilePickerButton("แนบใบรับรอง FSC", () => truckCertFile, docObj => { truckCertFile = docObj; }));
+
   // ── 6. ใบเสร็จรับเงิน — แนบได้หลายใบ ──
   const receiptPhotosHolder = { receipt: (editing && editing.receiptPhotos) || (editing && editing.receiptPhoto ? [editing.receiptPhoto] : []) };
   const receiptWrap = $("#receiptPhotoButton");
@@ -4399,6 +4487,7 @@ function renderLotForm(params) {
         driverName: data.truckDriverName || "",
         contamCheck: data.truckContamCheck || "",
         photos: truckPhotos,
+        fscCertFile: truckCertFile,
       },
       receiptPhotos: receiptPhotosHolder.receipt,
       closure: (editing && editing.closure) || { closed: false, photo: null, closedAt: null },
@@ -4486,6 +4575,9 @@ function renderLotDetail(params) {
   [["front", "หน้ารถ"], ["side", "ข้างรถ"], ["bed", "บนกระบะรถ"]].forEach(([key, label]) => {
     truckPhotosEl.append(renderPhotoThumbLink(truck.photos && truck.photos[key], label));
   });
+  const truckCertFileEl = $("#lotTruckCertFile");
+  truckCertFileEl.innerHTML = "";
+  truckCertFileEl.append(renderCertFileLink(truck.fscCertFile, "ใบรับรอง FSC"));
 
   // ── ใบเสร็จรับเงิน (แนบได้หลายใบ) ──
   const receiptEl = $("#lotReceiptPhoto");
@@ -4685,6 +4777,10 @@ function renderLotDetail(params) {
     [["front", "หน้ารถ"], ["side", "ข้างรถ"], ["bed", "บนกระบะรถ"]].forEach(([key, label]) => {
       truckPhotosEl.append(renderPhotoThumbLink(truck.photos && truck.photos[key], label));
     });
+    const truckCertFileEl = $("#lpsTruckCertFile");
+    truckCertFileEl.innerHTML = "";
+    truckCertFileEl.className = "lps-photo-row";
+    truckCertFileEl.append(renderCertFileLink(truck.fscCertFile, "ใบรับรอง FSC"));
 
     // 2. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
     const srcTb = $("#lpsSourceTable tbody");
