@@ -4576,8 +4576,29 @@ function renderLotDetail(params) {
     truckPhotosEl.append(renderPhotoThumbLink(truck.photos && truck.photos[key], label));
   });
   const truckCertFileEl = $("#lotTruckCertFile");
-  truckCertFileEl.innerHTML = "";
-  truckCertFileEl.append(renderCertFileLink(truck.fscCertFile, "ใบรับรอง FSC"));
+  function renderTruckCertFileSlot() {
+    truckCertFileEl.innerHTML = "";
+    if (truck.fscCertFile) {
+      truckCertFileEl.append(renderCertFileLink(truck.fscCertFile, "ใบรับรอง FSC"));
+      return;
+    }
+    // ล็อตเก่าที่บันทึกไว้ก่อนมีช่องนี้ — แนบเพิ่มได้ทันทีจากหน้ารายละเอียด ไม่ต้องกดแก้ไขทั้งล็อต
+    // หมายเหตุ: จงใจ poll docObj.url ตรงๆ แทนการเรียก waitForPendingPhotoUploads() ทันที เพราะ
+    // ฟังก์ชันนั้นเช็คตอนนี้เลย ก่อนที่ uploadCertFileToStorage (ซึ่งเพิ่ม _pendingPhotoUploads)
+    // จะได้เริ่มทำงานด้วยซ้ำ — จะ resolve ทันทีทั้งที่ยังไม่เริ่มอัพโหลดจริง
+    truckCertFileEl.append(buildFilePickerButton("แนบใบรับรอง FSC", () => null, async docObj => {
+      for (let i = 0; i < 100 && !docObj.url && !docObj._uploadFailed; i++) {
+        await new Promise(r => setTimeout(r, 150));
+      }
+      const fresh = getLot(lot.lotId);
+      fresh.truck = fresh.truck || {};
+      fresh.truck.fscCertFile = docObj;
+      upsertLot(fresh);
+      truck.fscCertFile = docObj;
+      renderTruckCertFileSlot();
+    }));
+  }
+  renderTruckCertFileSlot();
 
   // ── ใบเสร็จรับเงิน (แนบได้หลายใบ) ──
   const receiptEl = $("#lotReceiptPhoto");
