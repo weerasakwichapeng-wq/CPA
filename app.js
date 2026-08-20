@@ -4528,15 +4528,16 @@ function renderLotDetail(params) {
       el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(g.memberId)}` }, "ดูแปลง →"),
     );
     if (!weighings.length) {
-      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 7, class: "muted" }, "— ไม่มีรอบชั่ง —")));
+      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 8, class: "muted" }, "— ไม่มีรอบชั่ง —")));
       return;
     }
-    let sumContainer = 0, sumWeight = 0, sumAmount = 0;
+    let sumContainer = 0, sumWeight = 0, sumNet = 0, sumAmount = 0;
     weighings.forEach((w, wi) => {
       const net = netWeightKg(w);
       const amount = net * (Number(w.pricePerKg) || 0);
       sumContainer += Number(w.containerWeightKg) || 0;
       sumWeight += Number(w.weightKg) || 0;
+      sumNet += net;
       sumAmount += amount;
       const tr = el("tr", { class: overQuota ? "row-over-quota" : "" });
       if (wi === 0) tr.append(groupCell);
@@ -4544,6 +4545,7 @@ function renderLotDetail(params) {
         el("td", null, safe(w.sackCount)),
         el("td", null, fmtNum(w.containerWeightKg, 2)),
         el("td", null, fmtNum(w.weightKg, 2)),
+        el("td", null, fmtNum(net, 2)),
         el("td", null, fmtMoney(w.pricePerKg)),
         el("td", null, fmtMoney(amount)),
         el("td", null, safe(w.weighSlipNo)),
@@ -4559,6 +4561,7 @@ function renderLotDetail(params) {
         el("td", null, el("b", null, "รวม")),
         el("td", null, fmtNum(sumContainer, 2)),
         el("td", null, fmtNum(sumWeight, 2)),
+        el("td", null, fmtNum(sumNet, 2)),
         el("td", null, ""),
         el("td", null, fmtMoney(sumAmount)),
         el("td", null, ""),
@@ -4686,6 +4689,7 @@ function renderLotDetail(params) {
     // 2. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
     const srcTb = $("#lpsSourceTable tbody");
     srcTb.innerHTML = "";
+    let grandGrossWeightKg = 0;
     const weighingPhotos = [];
     lot.sources.forEach(g => {
       let deliveryQuota = 0, hasQuotaData = false;
@@ -4707,24 +4711,27 @@ function renderLotDetail(params) {
       const quotaCell = el("td", { rowspan, class: overQuota ? "lps-quota-bad" : "" },
         hasQuotaData ? (overQuota ? `⚠️ เกิน (${fmtMoney(deliveryQuota)})` : `ปกติ (${fmtMoney(deliveryQuota)})`) : "-");
       if (!weighings.length) {
-        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 7 }, "ไม่มีรอบชั่ง"), quotaCell));
+        srcTb.append(el("tr", null, groupCell, el("td", { colspan: 8 }, "ไม่มีรอบชั่ง"), quotaCell));
         return;
       }
-      let sumContainer = 0, sumWeight = 0, sumAmount = 0, sumDry = 0;
+      let sumContainer = 0, sumWeight = 0, sumNet = 0, sumAmount = 0, sumDry = 0;
       weighings.forEach((w, wi) => {
         const net = netWeightKg(w);
         const dry = net * (Number(lot.drcPercent) / 100);
         const amount = net * (Number(w.pricePerKg) || 0);
         sumContainer += Number(w.containerWeightKg) || 0;
         sumWeight += Number(w.weightKg) || 0;
+        sumNet += net;
         sumAmount += amount;
         sumDry += dry;
+        grandGrossWeightKg += Number(w.weightKg) || 0;
         const tr = el("tr", { class: overQuota ? "lps-over-quota" : "" });
         if (wi === 0) tr.append(groupCell);
         tr.append(
           el("td", { class: "lps-num" }, safe(w.sackCount)),
           el("td", { class: "lps-num" }, fmtNum(w.containerWeightKg, 2)),
           el("td", { class: "lps-num" }, fmtNum(w.weightKg, 2)),
+          el("td", { class: "lps-num" }, fmtNum(net, 2)),
           el("td", { class: "lps-num" }, fmtMoney(w.pricePerKg)),
           el("td", { class: "lps-num" }, fmtMoney(amount)),
           el("td", { class: "lps-num" }, fmtNum(dry, 2)),
@@ -4741,6 +4748,7 @@ function renderLotDetail(params) {
           el("td", null, el("b", null, "รวม")),
           el("td", { class: "lps-num" }, fmtNum(sumContainer, 2)),
           el("td", { class: "lps-num" }, fmtNum(sumWeight, 2)),
+          el("td", { class: "lps-num" }, fmtNum(sumNet, 2)),
           el("td", null, ""),
           el("td", { class: "lps-num" }, fmtMoney(sumAmount)),
           el("td", { class: "lps-num" }, fmtNum(sumDry, 2)),
@@ -4754,6 +4762,7 @@ function renderLotDetail(params) {
       el("td", null, "รวมทั้งหมด"),
       el("td", null, ""),
       el("td", null, ""),
+      el("td", { class: "lps-num" }, fmtNum(grandGrossWeightKg, 2)),
       el("td", { class: "lps-num" }, fmtNum(totals.totalWeightKg, 2)),
       el("td", null, ""),
       el("td", { class: "lps-num" }, fmtMoney(totals.totalAmount)),
