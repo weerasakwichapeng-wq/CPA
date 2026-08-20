@@ -3256,11 +3256,10 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-photo-large .lot-photo-thumb-cap { font-size: 8pt; }
   .lps-photo-large .lot-doc-icon { width: 100%; height: 60mm; font-size: 36pt; border: 1px solid #ccc; }
 
-  /* ใบรับรอง FSC — ขยายเต็มความกว้างหน้ากระดาษตามสัดส่วนไฟล์รูปจริง ไม่ครอบ max-height
-     แบบใบเสร็จ/ใบปิดรถ (เอกสารใบรับรองมักมีตัวอักษรเล็กเยอะ ต้องขยายเต็มที่ให้อ่านออก
-     ถ้าสูงเกิน 1 หน้าก็ปล่อยให้ไหลไปหน้าถัดไปเอง — page-break-inside:avoid จาก
-     .lps-photo-large ด้านบนช่วยไม่ให้รูปถูกตัดครึ่งกลางหน้า) */
-  .lps-cert-photo .lot-photo-thumb-img { max-height: none; }
+  /* ใบรับรอง FSC — อยู่ในหัวข้อ 1 ร่วมกับตารางข้อมูลรถ + รูปตรวจรถ 3 รูป จึงจำกัดความสูงไว้ที่
+     90mm (เตี้ยกว่าใบเสร็จ/ใบปิดรถซึ่งมีทั้งหน้าเป็นของตัวเอง) เพื่อให้ทั้งหัวข้อ 1 ยังพอดี
+     อยู่ในหน้าเดียว ไม่ดันล้นไปหน้าถัดไป */
+  .lps-cert-photo .lot-photo-thumb-img { max-height: 90mm; }
 
   /* เอกสารแนวตั้งยาว (ใบเสร็จ/POP) ถูกหมุนพิกเซลจริงแล้วใน JS (autoRotatePrintPhoto) —
      ไม่ใช้ CSS transform เพราะทำให้ไฟล์ PDF ใหญ่ขึ้นมากในบางเบราว์เซอร์ ใช้กฎขนาดปกติ
