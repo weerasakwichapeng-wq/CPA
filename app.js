@@ -4526,7 +4526,7 @@ function renderLotDetail(params) {
     );
     const weighings = g.weighings && g.weighings.length ? g.weighings : [];
     if (!weighings.length) {
-      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 10, class: "muted" }, "— ไม่มีรอบชั่ง —")));
+      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 9, class: "muted" }, "— ไม่มีรอบชั่ง —")));
       return;
     }
     weighings.forEach((w, wi) => {
@@ -4538,9 +4538,8 @@ function renderLotDetail(params) {
       if (wi === 0) tr.append(groupCell);
       tr.append(
         el("td", null, safe(w.sackCount)),
-        el("td", null, fmtNum(w.weightKg, 2)),
         el("td", null, fmtNum(w.containerWeightKg, 2)),
-        el("td", null, fmtNum(net, 2)),
+        el("td", null, fmtNum(w.weightKg, 2)),
         el("td", null, fmtNum(pct, 1) + "%"),
         el("td", null, fmtMoney(w.pricePerKg)),
         el("td", null, fmtMoney(amount)),
