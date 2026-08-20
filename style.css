@@ -3213,10 +3213,9 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
      FMU ไม่มีเซลล์ rowspan (FMU/โควต้า) ทำให้ตำแหน่ง nth-child ของแต่ละคอลัมน์เลื่อนไม่ตรงกัน
      ระหว่างแถวแรกกับแถวถัดไปของกลุ่มเดียวกัน */
   .lps-table td.lps-num { text-align: right; }
-  .lps-table tbody tr:nth-child(even) { background: #f7faf7; }
   .lps-table tr { page-break-inside: avoid; }
-  .lps-table .lps-total-row { font-weight: 700; background: #e8f5e9 !important; border-top: 1.5px solid #1b5e20; }
-  .lps-table .lps-subtotal-row { font-weight: 600; background: #f1f8f2 !important; }
+  .lps-table .lps-total-row { font-weight: 700; background: #eeeeee !important; border-top: 1.5px solid #333; }
+  .lps-table .lps-subtotal-row { font-weight: 600; background: #f5f5f5 !important; border-top: 1px solid #cfcfcf; }
   .lps-quota-bad { color: #b71c1c; font-weight: 700; }
   .lps-over-quota { background: #ffebee !important; }
 
@@ -3534,5 +3533,5 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 
 tr.row-over-quota { background: #ffebee; }
 .quota-warn-note { color: #b71c1c; font-weight: 600; }
-tr.row-subtotal { background: #e8f5e9; font-weight: 600; cursor: default; }
-tr.row-subtotal:hover { background: #e8f5e9; }
+tr.row-subtotal { background: #f5f5f5; font-weight: 600; cursor: default; border-top: 1px solid #d5d5d5; }
+tr.row-subtotal:hover { background: #f5f5f5; }
