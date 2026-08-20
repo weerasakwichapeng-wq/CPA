@@ -4512,8 +4512,9 @@ function renderLotDetail(params) {
     const overQuota = hasQuotaData && groupWeight > deliveryQuota;
     if (overQuota) anyOverQuota = true;
     const weighings = g.weighings && g.weighings.length ? g.weighings : [];
-    // +1 แถวสำหรับ "รวม" ของกลุ่มนี้ ต่อจากแถวรอบชั่งทั้งหมด (เฉพาะกลุ่มที่มีรอบชั่งจริง)
-    const groupCell = el("td", { rowspan: Math.max(weighings.length, 1) + (weighings.length ? 1 : 0) },
+    // +1 แถวสำหรับ "รวม" ของกลุ่มนี้ ต่อจากแถวรอบชั่งทั้งหมด (เฉพาะกลุ่มที่ชั่งมากกว่า 1 รอบ)
+    const showSubtotal = weighings.length > 1;
+    const groupCell = el("td", { rowspan: Math.max(weighings.length, 1) + (showSubtotal ? 1 : 0) },
       el("b", null, String(gi + 1) + ". " + safe(g.fmu)), el("br"),
       el("span", { class: "muted" }, (g.plots || []).join(", ")), el("br"),
       safe(g.nameTh),
@@ -4558,18 +4559,20 @@ function renderLotDetail(params) {
       );
       tbody.append(tr);
     });
-    const groupPct = totals.totalWeightKg ? (groupWeight / totals.totalWeightKg) * 100 : 0;
-    tbody.append(el("tr", { class: "row-subtotal" },
-      el("td", null, el("b", null, "รวม")),
-      el("td", null, fmtNum(sumContainer, 2)),
-      el("td", null, fmtNum(sumWeight, 2)),
-      el("td", null, fmtNum(groupPct, 1) + "%"),
-      el("td", null, ""),
-      el("td", null, fmtMoney(sumAmount)),
-      el("td", null, fmtNum(sumDry, 2)),
-      el("td", null, ""),
-      el("td", null, ""),
-    ));
+    if (showSubtotal) {
+      const groupPct = totals.totalWeightKg ? (groupWeight / totals.totalWeightKg) * 100 : 0;
+      tbody.append(el("tr", { class: "row-subtotal" },
+        el("td", null, el("b", null, "รวม")),
+        el("td", null, fmtNum(sumContainer, 2)),
+        el("td", null, fmtNum(sumWeight, 2)),
+        el("td", null, fmtNum(groupPct, 1) + "%"),
+        el("td", null, ""),
+        el("td", null, fmtMoney(sumAmount)),
+        el("td", null, fmtNum(sumDry, 2)),
+        el("td", null, ""),
+        el("td", null, ""),
+      ));
+    }
   });
   $("#lotQuotaWarnNote").style.display = anyOverQuota ? "" : "none";
 
