@@ -3247,7 +3247,10 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-photo-large { display: flex; flex-direction: column; gap: 6mm; }
   .lps-photo-large .lot-photo-thumb-link { width: 100%; page-break-inside: avoid; }
   .lps-photo-large .lot-photo-thumb-img {
-    width: 100%; max-height: 150mm; object-fit: contain; background: #f7f7f7;
+    /* ต้องกำหนด height: auto ทับ height:84px จาก base rule (.lot-photo-thumb-img นอก
+       @media print) ไม่งั้น max-height ด้านล่างไม่มีผล — รูปจะถูกบีบเหลือสูงแค่ 84px
+       แล้ว object-fit:contain ก็ย่อภาพให้เล็กจิ๋วพอดีกรอบเตี้ยๆ นั้นแทนที่จะเต็มความกว้าง */
+    width: 100%; height: auto; max-height: 150mm; object-fit: contain; background: #f7f7f7;
     border: 1px solid #ccc;
   }
   .lps-photo-large .lot-photo-thumb-cap { font-size: 8pt; }
