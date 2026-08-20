@@ -4528,29 +4528,24 @@ function renderLotDetail(params) {
       el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(g.memberId)}` }, "ดูแปลง →"),
     );
     if (!weighings.length) {
-      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 9, class: "muted" }, "— ไม่มีรอบชั่ง —")));
+      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 7, class: "muted" }, "— ไม่มีรอบชั่ง —")));
       return;
     }
-    let sumContainer = 0, sumWeight = 0, sumAmount = 0, sumDry = 0;
+    let sumContainer = 0, sumWeight = 0, sumAmount = 0;
     weighings.forEach((w, wi) => {
       const net = netWeightKg(w);
-      const dry = net * (Number(lot.drcPercent) / 100);
-      const pct = totals.totalWeightKg ? (net / totals.totalWeightKg) * 100 : 0;
       const amount = net * (Number(w.pricePerKg) || 0);
       sumContainer += Number(w.containerWeightKg) || 0;
       sumWeight += Number(w.weightKg) || 0;
       sumAmount += amount;
-      sumDry += dry;
       const tr = el("tr", { class: overQuota ? "row-over-quota" : "" });
       if (wi === 0) tr.append(groupCell);
       tr.append(
         el("td", null, safe(w.sackCount)),
         el("td", null, fmtNum(w.containerWeightKg, 2)),
         el("td", null, fmtNum(w.weightKg, 2)),
-        el("td", null, fmtNum(pct, 1) + "%"),
         el("td", null, fmtMoney(w.pricePerKg)),
         el("td", null, fmtMoney(amount)),
-        el("td", null, fmtNum(dry, 2)),
         el("td", null, safe(w.weighSlipNo)),
         el("td", { class: "lot-photo-cell" },
           renderPhotoThumbLink(w.scalePhoto, "ตาชั่ง"),
@@ -4560,15 +4555,12 @@ function renderLotDetail(params) {
       tbody.append(tr);
     });
     if (showSubtotal) {
-      const groupPct = totals.totalWeightKg ? (groupWeight / totals.totalWeightKg) * 100 : 0;
       tbody.append(el("tr", { class: "row-subtotal" },
         el("td", null, el("b", null, "รวม")),
         el("td", null, fmtNum(sumContainer, 2)),
         el("td", null, fmtNum(sumWeight, 2)),
-        el("td", null, fmtNum(groupPct, 1) + "%"),
         el("td", null, ""),
         el("td", null, fmtMoney(sumAmount)),
-        el("td", null, fmtNum(sumDry, 2)),
         el("td", null, ""),
         el("td", null, ""),
       ));
