@@ -3216,6 +3216,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-table tbody tr:nth-child(even) { background: #f7faf7; }
   .lps-table tr { page-break-inside: avoid; }
   .lps-table .lps-total-row { font-weight: 700; background: #e8f5e9 !important; border-top: 1.5px solid #1b5e20; }
+  .lps-table .lps-subtotal-row { font-weight: 600; background: #f1f8f2 !important; }
   .lps-quota-bad { color: #b71c1c; font-weight: 700; }
   .lps-over-quota { background: #ffebee !important; }
 

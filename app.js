@@ -4698,7 +4698,8 @@ function renderLotDetail(params) {
       const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
       const overQuota = hasQuotaData && groupWeight > deliveryQuota;
       const weighings = g.weighings && g.weighings.length ? g.weighings : [];
-      const rowspan = Math.max(weighings.length, 1);
+      const showSubtotal = weighings.length > 1;
+      const rowspan = Math.max(weighings.length, 1) + (showSubtotal ? 1 : 0);
       const groupCell = el("td", { rowspan },
         el("b", null, safe(g.fmu)), ` (${(g.plots || []).join(", ")})`, el("br"),
         safe(g.nameTh),
@@ -4709,10 +4710,15 @@ function renderLotDetail(params) {
         srcTb.append(el("tr", null, groupCell, el("td", { colspan: 7 }, "ไม่มีรอบชั่ง"), quotaCell));
         return;
       }
+      let sumContainer = 0, sumWeight = 0, sumAmount = 0, sumDry = 0;
       weighings.forEach((w, wi) => {
         const net = netWeightKg(w);
         const dry = net * (Number(lot.drcPercent) / 100);
         const amount = net * (Number(w.pricePerKg) || 0);
+        sumContainer += Number(w.containerWeightKg) || 0;
+        sumWeight += Number(w.weightKg) || 0;
+        sumAmount += amount;
+        sumDry += dry;
         const tr = el("tr", { class: overQuota ? "lps-over-quota" : "" });
         if (wi === 0) tr.append(groupCell);
         tr.append(
@@ -4730,6 +4736,17 @@ function renderLotDetail(params) {
         if (w.scalePhoto) weighingPhotos.push([w.scalePhoto, `ตาชั่ง — ${roundLabel}`]);
         if (w.rubberPhoto) weighingPhotos.push([w.rubberPhoto, `ยาง — ${roundLabel}`]);
       });
+      if (showSubtotal) {
+        srcTb.append(el("tr", { class: "lps-subtotal-row" },
+          el("td", null, el("b", null, "รวม")),
+          el("td", { class: "lps-num" }, fmtNum(sumContainer, 2)),
+          el("td", { class: "lps-num" }, fmtNum(sumWeight, 2)),
+          el("td", null, ""),
+          el("td", { class: "lps-num" }, fmtMoney(sumAmount)),
+          el("td", { class: "lps-num" }, fmtNum(sumDry, 2)),
+          el("td", null, ""),
+        ));
+      }
     });
     const srcTf = $("#lpsSourceTable tfoot");
     srcTf.innerHTML = "";
