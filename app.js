@@ -4526,13 +4526,11 @@ function renderLotDetail(params) {
     );
     const weighings = g.weighings && g.weighings.length ? g.weighings : [];
     if (!weighings.length) {
-      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 10, class: "muted" }, "— ไม่มีรอบชั่ง —")));
+      tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 8, class: "muted" }, "— ไม่มีรอบชั่ง —")));
       return;
     }
     weighings.forEach((w, wi) => {
       const net = netWeightKg(w);
-      const dry = net * (Number(lot.drcPercent) / 100);
-      const pct = totals.totalWeightKg ? (net / totals.totalWeightKg) * 100 : 0;
       const amount = net * (Number(w.pricePerKg) || 0);
       const tr = el("tr", { class: overQuota ? "row-over-quota" : "" });
       if (wi === 0) tr.append(groupCell);
@@ -4541,10 +4539,8 @@ function renderLotDetail(params) {
         el("td", null, fmtNum(w.weightKg, 2)),
         el("td", null, fmtNum(w.containerWeightKg, 2)),
         el("td", null, fmtNum(net, 2)),
-        el("td", null, fmtNum(pct, 1) + "%"),
         el("td", null, fmtMoney(w.pricePerKg)),
         el("td", null, fmtMoney(amount)),
-        el("td", null, fmtNum(dry, 2)),
         el("td", null, safe(w.weighSlipNo)),
         el("td", { class: "lot-photo-cell" },
           renderPhotoThumbLink(w.scalePhoto, "ตาชั่ง"),
