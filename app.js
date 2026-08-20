@@ -4511,7 +4511,9 @@ function renderLotDetail(params) {
     const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
     const overQuota = hasQuotaData && groupWeight > deliveryQuota;
     if (overQuota) anyOverQuota = true;
-    const groupCell = el("td", { rowspan: Math.max((g.weighings || []).length, 1) },
+    const weighings = g.weighings && g.weighings.length ? g.weighings : [];
+    // +1 แถวสำหรับ "รวม" ของกลุ่มนี้ ต่อจากแถวรอบชั่งทั้งหมด (เฉพาะกลุ่มที่มีรอบชั่งจริง)
+    const groupCell = el("td", { rowspan: Math.max(weighings.length, 1) + (weighings.length ? 1 : 0) },
       el("b", null, String(gi + 1) + ". " + safe(g.fmu)), el("br"),
       el("span", { class: "muted" }, (g.plots || []).join(", ")), el("br"),
       safe(g.nameTh),
@@ -4524,16 +4526,20 @@ function renderLotDetail(params) {
       el("br"),
       el("a", { class: "btn btn-small", href: `#/farmer/${encodeURIComponent(g.memberId)}` }, "ดูแปลง →"),
     );
-    const weighings = g.weighings && g.weighings.length ? g.weighings : [];
     if (!weighings.length) {
       tbody.append(el("tr", { class: overQuota ? "row-over-quota" : "" }, groupCell, el("td", { colspan: 9, class: "muted" }, "— ไม่มีรอบชั่ง —")));
       return;
     }
+    let sumContainer = 0, sumWeight = 0, sumAmount = 0, sumDry = 0;
     weighings.forEach((w, wi) => {
       const net = netWeightKg(w);
       const dry = net * (Number(lot.drcPercent) / 100);
       const pct = totals.totalWeightKg ? (net / totals.totalWeightKg) * 100 : 0;
       const amount = net * (Number(w.pricePerKg) || 0);
+      sumContainer += Number(w.containerWeightKg) || 0;
+      sumWeight += Number(w.weightKg) || 0;
+      sumAmount += amount;
+      sumDry += dry;
       const tr = el("tr", { class: overQuota ? "row-over-quota" : "" });
       if (wi === 0) tr.append(groupCell);
       tr.append(
@@ -4552,6 +4558,18 @@ function renderLotDetail(params) {
       );
       tbody.append(tr);
     });
+    const groupPct = totals.totalWeightKg ? (groupWeight / totals.totalWeightKg) * 100 : 0;
+    tbody.append(el("tr", { class: "row-subtotal" },
+      el("td", null, el("b", null, "รวม")),
+      el("td", null, fmtNum(sumContainer, 2)),
+      el("td", null, fmtNum(sumWeight, 2)),
+      el("td", null, fmtNum(groupPct, 1) + "%"),
+      el("td", null, ""),
+      el("td", null, fmtMoney(sumAmount)),
+      el("td", null, fmtNum(sumDry, 2)),
+      el("td", null, ""),
+      el("td", null, ""),
+    ));
   });
   $("#lotQuotaWarnNote").style.display = anyOverQuota ? "" : "none";
 

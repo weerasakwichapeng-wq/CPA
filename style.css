@@ -3533,3 +3533,5 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 
 tr.row-over-quota { background: #ffebee; }
 .quota-warn-note { color: #b71c1c; font-weight: 600; }
+tr.row-subtotal { background: #e8f5e9; font-weight: 600; cursor: default; }
+tr.row-subtotal:hover { background: #e8f5e9; }
