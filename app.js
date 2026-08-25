@@ -794,6 +794,10 @@ function el(tag, attrs, ...children) {
     if (k === "class") e.className = attrs[k];
     else if (k === "html") e.innerHTML = attrs[k];
     else if (k.startsWith("on")) e.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+    // boolean attrs (checked/disabled/selected/...) เป็นแบบ "มี = true" ใน HTML —
+    // setAttribute(k, false) ยังทำให้ attribute มีอยู่ (ค่า "false" เป็น string ที่ไม่ว่าง)
+    // จึงยังติ๊ก/ปิดใช้งานอยู่ดี ต้องตั้งเป็น property ตรงๆ ถ้าค่าที่ส่งมาเป็น boolean แท้
+    else if (typeof attrs[k] === "boolean") e[k] = attrs[k];
     else e.setAttribute(k, attrs[k]);
   }
   for (const c of children) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c));
