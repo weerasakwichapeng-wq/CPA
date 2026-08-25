@@ -614,6 +614,7 @@
         <button class="btn btn-secondary" id="lotExportBtn">📤 Export ทั้งหมด</button>
         <button class="btn" id="lotImportBtn">📥 Import JSON</button>
         <input type="file" id="lotImportFile" accept=".json,.js" style="display:none">
+        <button class="btn btn-secondary" id="lotKmlSelectedBtn" disabled>🌐 ดาวน์โหลด KML ที่เลือก (<span id="lotSelectedCount">0</span>)</button>
       </div>
 
       <section class="panel panel-quota">
@@ -624,6 +625,7 @@
         <table class="data-table" id="lotsTable">
           <thead>
             <tr>
+              <th><input type="checkbox" id="lotSelectAll" title="เลือกทั้งหมด"></th>
               <th>เลขล็อต</th>
               <th>วันที่</th>
               <th>HUB</th>
@@ -631,6 +633,7 @@
               <th>FSC Claim</th>
               <th>น้ำหนัก (กก.)</th>
               <th>DRC (กก.)</th>
+              <th>%DRC</th>
               <th>แปลง</th>
               <th>เอกสาร</th>
               <th>สถานะ</th>
@@ -1343,6 +1346,6 @@
   <script src="data/wdpa.js"></script>
   <script src="data/bufferzone.js?v=2026072401"></script>
   <script src="data/satellite-config.js"></script>
-  <script src="app.js?v=2026082012"></script>
+  <script src="app.js?v=2026082013"></script>
 </body>
 </html>

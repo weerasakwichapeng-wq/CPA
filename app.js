@@ -4108,6 +4108,17 @@ function renderLots() {
   const search = $("#lotSearch");
   const filterMonth = $("#lotFilterMonth");
   const filterStatus = $("#lotFilterStatus");
+  const selectAllCb = $("#lotSelectAll");
+  const kmlSelectedBtn = $("#lotKmlSelectedBtn");
+  const selectedCountEl = $("#lotSelectedCount");
+  const selectedLotIds = new Set();
+  let visibleLotIds = [];
+
+  function updateSelectionUI() {
+    selectedCountEl.textContent = selectedLotIds.size;
+    kmlSelectedBtn.disabled = selectedLotIds.size === 0;
+    selectAllCb.checked = visibleLotIds.length > 0 && visibleLotIds.every(id => selectedLotIds.has(id));
+  }
 
   function refresh() {
     const lots = loadLots();
@@ -4148,6 +4159,7 @@ function renderLots() {
     const fS = filterStatus.value;
     tbody.innerHTML = "";
     let shown = 0;
+    visibleLotIds = [];
     lots.forEach(l => {
       if (fM && !(l.lotId || "").includes(`-${fM}-`)) return;
       if (fS && l.status !== fS) return;
@@ -4157,8 +4169,20 @@ function renderLots() {
         if (!blob.includes(q)) return;
       }
       shown++;
+      visibleLotIds.push(l.lotId);
       const t = calcLotTotals(l);
+      const checkCell = el("td", { onclick: e => e.stopPropagation() },
+        el("input", {
+          type: "checkbox",
+          checked: selectedLotIds.has(l.lotId),
+          onchange: e => {
+            if (e.target.checked) selectedLotIds.add(l.lotId); else selectedLotIds.delete(l.lotId);
+            updateSelectionUI();
+          },
+        }),
+      );
       const tr = el("tr", { onclick: () => location.hash = `#/lot/${encodeURIComponent(l.lotId)}` },
+        checkCell,
         el("td", null, el("b", null, l.lotId)),
         el("td", null, l.purchaseDate || "-"),
         el("td", null, safe(l.hub)),
@@ -4166,6 +4190,7 @@ function renderLots() {
         el("td", null, el("span", { class: "tr-badge tr-badge-green" }, safe(l.fscClaim))),
         el("td", null, fmtNum(t.totalWeightKg, 0)),
         el("td", null, fmtNum(t.totalDrcKg, 0)),
+        el("td", null, l.drcPercent != null && l.drcPercent !== "" ? fmtNum(l.drcPercent, 1) + "%" : "-"),
         el("td", null, `${t.plotCount} แปลง`),
         el("td", { style: "text-align:center" }, lotDocsComplete(l)
           ? el("span", { class: "tr-badge tr-badge-green", title: "แนบเอกสารครบ (ใบรับรอง FSC / ใบเสร็จ / ใบปิดรถ)" }, "✅ ครบ")
@@ -4177,14 +4202,33 @@ function renderLots() {
     });
 
     if (shown === 0) {
-      tbody.append(el("tr", null, el("td", { colspan: 11, class: "muted", style: "text-align:center;padding:24px" },
+      tbody.append(el("tr", null, el("td", { colspan: 13, class: "muted", style: "text-align:center;padding:24px" },
         lots.length === 0 ? "ยังไม่มีล็อต — กด \"➕ สร้างล็อตใหม่\" เพื่อเริ่ม" : "ไม่พบล็อตตามเงื่อนไข")));
     }
+    // ล็อตที่เคยเลือกไว้แต่ถูกลบไปแล้ว ให้เอาออกจากรายการที่เลือก
+    [...selectedLotIds].forEach(id => { if (!lots.some(l => l.lotId === id)) selectedLotIds.delete(id); });
+    updateSelectionUI();
   }
 
   search.addEventListener("input", refresh);
   filterMonth.addEventListener("change", refresh);
   filterStatus.addEventListener("change", refresh);
+  selectAllCb.addEventListener("change", () => {
+    if (selectAllCb.checked) visibleLotIds.forEach(id => selectedLotIds.add(id));
+    else visibleLotIds.forEach(id => selectedLotIds.delete(id));
+    refresh();
+  });
+  kmlSelectedBtn.onclick = () => {
+    const lots = loadLots().filter(l => selectedLotIds.has(l.lotId));
+    if (!lots.length) return;
+    const kml = buildMultiLotKML(lots);
+    const blob = new Blob([kml], { type: "application/vnd.google-earth.kml+xml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `lots-traceability-${lots.length}.kml`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 100);
+  };
   refresh();
 
   // Export
@@ -4982,7 +5026,7 @@ function renderLotDetail(params) {
 }
 
 /* ── 5. สร้างการตรวจสอบแหล่งที่มา — รวม polygon ของแปลงต้นทางในล็อตเป็นไฟล์ KML เดียว ── */
-function buildLotSourceKML(lot) {
+function buildLotPlacemarks(lot) {
   const placemarks = [];
   lot.sources.forEach(g => {
     const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
@@ -4998,20 +5042,39 @@ function buildLotSourceKML(lot) {
       const coordStr = coords.map(c => `${c[0]},${c[1]},0`).join(" ");
       const name = `${g.fmu} · ${plotName}`.replace(/[<>&]/g, "");
       const desc = `${(g.nameTh || "").replace(/[<>&]/g, "")} — น้ำหนักรวม FMU ${fmtNum(groupWeight, 2)} กก. (ล็อต ${lot.lotId})`;
-      placemarks.push(`    <Placemark>
-      <name>${name}</name>
-      <description>${desc}</description>
-      <Polygon>
-        <outerBoundaryIs><LinearRing><coordinates>${coordStr}</coordinates></LinearRing></outerBoundaryIs>
-      </Polygon>
-    </Placemark>`);
+      placemarks.push(`      <Placemark>
+        <name>${name}</name>
+        <description>${desc}</description>
+        <Polygon>
+          <outerBoundaryIs><LinearRing><coordinates>${coordStr}</coordinates></LinearRing></outerBoundaryIs>
+        </Polygon>
+      </Placemark>`);
     });
   });
+  return placemarks;
+}
+function buildLotSourceKML(lot) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>${lot.lotId} — แหล่งที่มา (Traceability)</name>
-${placemarks.join("\n")}
+${buildLotPlacemarks(lot).join("\n")}
+  </Document>
+</kml>
+`;
+}
+/* รวมหลายล็อตเป็น KML เดียว — แยกแต่ละล็อตเป็น Folder เพื่อให้เปิดดูใน Google Earth
+   แล้วยังแยกแยะได้ว่า placemark ไหนมาจากล็อตไหน */
+function buildMultiLotKML(lots) {
+  const folders = lots.map(lot => `    <Folder>
+      <name>${lot.lotId.replace(/[<>&]/g, "")}</name>
+${buildLotPlacemarks(lot).join("\n")}
+    </Folder>`);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>แหล่งที่มา (Traceability) — ${lots.length} ล็อต</name>
+${folders.join("\n")}
   </Document>
 </kml>
 `;
