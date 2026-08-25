@@ -4549,10 +4549,12 @@ function renderLotDetail(params) {
   let fscAreaSum = 0, fmus = new Set();
   lot.sources.forEach(g => {
     // จับคู่ตามชื่อแปลงที่แน่นอนเท่านั้น (ห้าม fallback ไป g.memberId ตัวเดียว
-    // เพราะแต่ละแปลงย่อยใน FMU เดียวกันมักมี memberId/fscArea/โควต้าของตัวเองต่างกัน)
+    // เพราะแต่ละแปลงย่อยใน FMU เดียวกันมักมี memberId/tappingArea/โควต้าของตัวเองต่างกัน)
+    // ใช้ tappingArea แทน fscArea เฉพาะ KPI นี้ — ยืนยันจากผู้ใช้แล้วว่าทุกแปลงผ่านการรับรอง FSC
+    // จริง แต่ฟิลด์ fscArea/productiveArea ในไฟล์ต้นทางมีค่า 0 ผิดพลาดอยู่หลายแปลง
     (g.plots || []).forEach(plotName => {
       const r = allRecs.find(x => x.plot === plotName);
-      if (r) fscAreaSum += Number(r.fscArea) || 0;
+      if (r) fscAreaSum += Number(r.tappingArea) || 0;
     });
     if (g.fmu) fmus.add(g.fmu);
   });
