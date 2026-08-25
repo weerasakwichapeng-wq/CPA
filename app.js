@@ -4093,6 +4093,15 @@ function calcLotTotals(lot) {
   return { totalWeightKg, totalDrcKg, totalAmount, plotCount };
 }
 
+/* เช็คว่าล็อตแนบเอกสารครบหรือยัง — ใบรับรอง FSC ของรถ + ใบเสร็จรับเงิน + รูปใบปิดรถ (POP)
+   (ไม่เช็คข้อมูลอื่น เช่น เลขใบส่งของ/DRC/รูปตาชั่ง-ยาง ตามที่ตกลงไว้) */
+function lotDocsComplete(lot) {
+  const hasCert = !!(lot.truck && lot.truck.fscCertFile);
+  const hasReceipt = !!(lot.receiptPhotos && lot.receiptPhotos.length);
+  const hasClosurePhoto = !!(lot.closure && lot.closure.photo);
+  return hasCert && hasReceipt && hasClosurePhoto;
+}
+
 /* ── Lots list ── */
 function renderLots() {
   const tbody = $("#lotsTable tbody");
@@ -4158,6 +4167,9 @@ function renderLots() {
         el("td", null, fmtNum(t.totalWeightKg, 0)),
         el("td", null, fmtNum(t.totalDrcKg, 0)),
         el("td", null, `${t.plotCount} แปลง`),
+        el("td", { style: "text-align:center" }, lotDocsComplete(l)
+          ? el("span", { class: "tr-badge tr-badge-green", title: "แนบเอกสารครบ (ใบรับรอง FSC / ใบเสร็จ / ใบปิดรถ)" }, "✅ ครบ")
+          : el("span", { class: "tr-badge tr-badge-red", title: "ยังแนบเอกสารไม่ครบ (ใบรับรอง FSC / ใบเสร็จ / ใบปิดรถ)" }, "⚠️ ไม่ครบ")),
         el("td", null, el("span", { class: "tr-badge " + (l.status === "Open" ? "tr-badge-green" : l.status === "Shipped" ? "tr-badge-gray" : "tr-badge-red") }, safe(l.status))),
         el("td", null, "▸"),
       );
@@ -4165,7 +4177,7 @@ function renderLots() {
     });
 
     if (shown === 0) {
-      tbody.append(el("tr", null, el("td", { colspan: 10, class: "muted", style: "text-align:center;padding:24px" },
+      tbody.append(el("tr", null, el("td", { colspan: 11, class: "muted", style: "text-align:center;padding:24px" },
         lots.length === 0 ? "ยังไม่มีล็อต — กด \"➕ สร้างล็อตใหม่\" เพื่อเริ่ม" : "ไม่พบล็อตตามเงื่อนไข")));
     }
   }
