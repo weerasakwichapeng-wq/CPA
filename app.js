@@ -1231,17 +1231,14 @@ function isPdfFile(file) {
 }
 /* เรนเดอร์หน้าแรกของไฟล์ PDF เป็นรูปภาพ (data URL) ด้วย PDF.js — ใช้เฉพาะในเอกสารพิมพ์ เพราะ
    <embed>/<iframe> ของ PDF ไม่ถูกพิมพ์ลง PDF/กระดาษ (เบราว์เซอร์ไม่ rasterize plugin viewer) */
-async function renderPdfFirstPageAsDataUrl(url, maxDim, extraRotation) {
+async function renderPdfFirstPageAsDataUrl(url, maxDim) {
   const pdf = await pdfjsLib.getDocument(url).promise;
   const page = await pdf.getPage(1);
-  // ไฟล์ต้นฉบับ (สแกน/ครอปมาเป็นรูปแล้ววางลง PDF) มักไม่ได้ตั้งค่า /Rotate ให้ตรง — ขนาดหน้า
-  // (MediaBox) เป็นแนวตั้งอยู่แล้ว แต่ "เนื้อหา" ในหน้ากลับเอียง 90° ตรวจจากสัดส่วน canvas
-  // เพียงอย่างเดียวไม่พอ (ความกว้าง/สูงของหน้าไม่ได้บอกว่าเนื้อหาข้างในเอียงหรือเปล่า) จึงรับ
-  // extraRotation มาบวกเพิ่มจาก rotation เดิมของหน้า แล้วให้ pdf.js หมุนเนื้อหาให้ตรงๆ เลย
-  const rotation = (page.rotate + (extraRotation || 0)) % 360;
-  const baseViewport = page.getViewport({ scale: 1, rotation });
+  // page.rotate = ค่า /Rotate ที่ฝังในไฟล์ PDF เอง — ปล่อยให้ getViewport() ใช้ค่านี้ตามปกติ
+  // (ยืนยันแล้วว่าไฟล์จริงตั้งค่ามาถูกต้อง ไม่ต้องหมุนเพิ่ม)
+  const baseViewport = page.getViewport({ scale: 1 });
   const scale = maxDim / Math.max(baseViewport.width, baseViewport.height);
-  const viewport = page.getViewport({ scale, rotation });
+  const viewport = page.getViewport({ scale });
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(viewport.width);
   canvas.height = Math.round(viewport.height);
@@ -1265,7 +1262,7 @@ function renderPrintCertFile(container, file, label) {
     el("div", { class: "lot-doc-icon" }, "📄"),
     el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
   ));
-  return renderPdfFirstPageAsDataUrl(src, 1600, 180).then(dataUrl => {
+  return renderPdfFirstPageAsDataUrl(src, 1600).then(dataUrl => {
     const link = el("a", { href: src, target: "_blank", rel: "noopener", class: "lot-photo-thumb-link" },
       el("img", { src: dataUrl, alt: label || file.name, class: "lot-photo-thumb-img" }),
       el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
@@ -5075,26 +5072,6 @@ function renderLotDetail(params) {
     $("#lpsFooter").textContent = `พิมพ์เมื่อ ${new Date().toLocaleString("th-TH", { dateStyle: "long", timeStyle: "short" })} · โดย ${me.displayName || me.username || "-"} · เอกสารนี้สร้างจากระบบตรวจสอบย้อนกลับยางพารา FSC`;
   }
   renderPrintSheet();
-  // ── TEMP DEBUG — โชว์ใบรับรอง FSC ทั้ง 4 ทิศ (0/90/180/270°) เป็นแถบคาดบนสุดของหน้าจอ (ไม่พิมพ์ลง
-  //    กระดาษ) เพื่อให้เทียบเลือกทิศที่ถูกต้องได้ตรงๆ โดยไม่ต้องเดา — ลบออกหลังยืนยันทิศที่ใช้จริงแล้ว ──
-  (async () => {
-    const certFile = lot.truck && lot.truck.fscCertFile;
-    if (!isPdfFile(certFile)) return;
-    const src = certFile.url || certFile.data;
-    const dbg = el("div", {
-      style: "position:fixed;top:0;left:0;right:0;z-index:99999;background:#fff3cd;border-bottom:3px solid #d32f2f;" +
-        "padding:8px;display:flex;gap:10px;overflow-x:auto;align-items:flex-start;font-family:sans-serif;",
-    }, el("div", { style: "font-weight:700;padding:8px;white-space:nowrap;" }, "DEBUG ใบรับรอง FSC:"));
-    document.body.prepend(dbg);
-    for (const r of [0, 90, 180, 270]) {
-      const box = el("div", { style: "text-align:center" }, el("div", { style: "font-weight:700" }, r + "°"));
-      dbg.append(box);
-      try {
-        const dataUrl = await renderPdfFirstPageAsDataUrl(src, 300, r);
-        box.append(el("img", { src: dataUrl, style: "height:180px;border:1px solid #333" }));
-      } catch (e) { box.append(el("div", null, "error")); console.error("debug render", r, e); }
-    }
-  })();
   // ย่อรูปทุกใบในเอกสารพิมพ์ให้เหลือความละเอียดพอสำหรับกระดาษ (ไม่ใช่ต้นฉบับ 4K) — ไฟล์ PDF ที่
   // ได้จาก "พิมพ์ → บันทึกเป็น PDF" จะเล็กลงมาก เพราะเบราว์เซอร์ฝัง resolution จริงของรูปลงไฟล์เสมอ
   // ไม่ว่า CSS จะย่อขนาดที่แสดงผลแค่ไหนก็ตาม จึงต้องย่อไฟล์รูปจริงๆ ก่อนพิมพ์
