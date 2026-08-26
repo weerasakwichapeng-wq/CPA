@@ -1249,8 +1249,8 @@ async function renderPdfFirstPageAsDataUrl(url, maxDim) {
     rotated.width = canvas.height;
     rotated.height = canvas.width;
     const rctx = rotated.getContext("2d");
-    rctx.translate(rotated.width, 0);
-    rctx.rotate(Math.PI / 2);
+    rctx.translate(0, rotated.height);
+    rctx.rotate(-Math.PI / 2);
     rctx.drawImage(canvas, 0, 0);
     return rotated.toDataURL("image/jpeg", 0.85);
   }
