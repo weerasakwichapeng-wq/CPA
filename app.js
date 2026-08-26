@@ -1265,7 +1265,7 @@ function renderPrintCertFile(container, file, label) {
     el("div", { class: "lot-doc-icon" }, "📄"),
     el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
   ));
-  return renderPdfFirstPageAsDataUrl(src, 1600, 90).then(dataUrl => {
+  return renderPdfFirstPageAsDataUrl(src, 1600, 270).then(dataUrl => {
     const link = el("a", { href: src, target: "_blank", rel: "noopener", class: "lot-photo-thumb-link" },
       el("img", { src: dataUrl, alt: label || file.name, class: "lot-photo-thumb-img" }),
       el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
