@@ -3191,6 +3191,10 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   /* ส่วนแปลงต้นทางอาจยาวหลายหน้าเมื่อมีหลาย FMU/รูปเยอะ — ต้องปล่อยให้ตัดหน้าได้ตามปกติ
      ไม่งั้น "avoid" จะบังคับทั้งตารางยาวๆ ให้อยู่หน้าเดียวจนล้น */
   .lps-section:has(.lps-table) { page-break-inside: auto; }
+  /* หัวข้อ 1 (ตรวจเช็ครถขนส่ง) + 2 (ใบส่งมอบสินค้า) — บังคับให้อยู่หน้าเดียวกันเสมอ ไม่ตัดหน้าคั่นกลาง */
+  .lps-section-group { page-break-inside: avoid; }
+  /* หัวข้อ "ใบรับรอง FSC" — แยกเป็นหัวข้อเดี่ยว ให้เต็ม 1 แผ่นกระดาษ ไม่ปนกับหัวข้ออื่น */
+  .lps-section-cert { page-break-before: always; page-break-after: always; }
   .lps-sec-title {
     display: flex; align-items: center; gap: 2.5mm;
     font-size: 11pt; font-weight: 700; color: #1b5e20;
@@ -3210,6 +3214,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-table { width: 100%; border-collapse: collapse; font-size: 8pt; page-break-inside: auto; }
   .lps-table th, .lps-table td { border: 1px solid #cfcfcf; padding: 1.8mm 2.2mm; text-align: left; vertical-align: top; }
   .lps-table th { background: #1b5e20; color: white; font-weight: 700; text-align: center; }
+  .lps-member-id { color: #666; font-size: 7.5pt; }
   /* จัดคอลัมน์ตัวเลขชิดขวาด้วย class ตรงๆ (ไม่ใช้ :nth-child) เพราะแถวที่ 2 ขึ้นไปของแต่ละ
      FMU ไม่มีเซลล์ rowspan (FMU/โควต้า) ทำให้ตำแหน่ง nth-child ของแต่ละคอลัมน์เลื่อนไม่ตรงกัน
      ระหว่างแถวแรกกับแถวถัดไปของกลุ่มเดียวกัน */
@@ -3256,10 +3261,9 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   .lps-photo-large .lot-photo-thumb-cap { font-size: 8pt; }
   .lps-photo-large .lot-doc-icon { width: 100%; height: 60mm; font-size: 36pt; border: 1px solid #ccc; }
 
-  /* ใบรับรอง FSC — อยู่ในหัวข้อ 1 ร่วมกับตารางข้อมูลรถ + รูปตรวจรถ 3 รูป จึงจำกัดความสูงไว้ที่
-     90mm (เตี้ยกว่าใบเสร็จ/ใบปิดรถซึ่งมีทั้งหน้าเป็นของตัวเอง) เพื่อให้ทั้งหัวข้อ 1 ยังพอดี
-     อยู่ในหน้าเดียว ไม่ดันล้นไปหน้าถัดไป */
-  .lps-cert-photo .lot-photo-thumb-img { max-height: 90mm; }
+  /* ใบรับรอง FSC — อยู่ในหัวข้อของตัวเอง (.lps-section-cert บังคับขึ้นหน้าใหม่ + จบหน้า)
+     จึงขยายได้เต็มพื้นที่ที่เหลือของหน้ากระดาษ อ่านรายละเอียดในใบรับรองได้ชัดเจน */
+  .lps-cert-photo .lot-photo-thumb-img { max-height: 230mm; }
 
   /* เอกสารแนวตั้งยาว (ใบเสร็จ/POP) ถูกหมุนพิกเซลจริงแล้วใน JS (autoRotatePrintPhoto) —
      ไม่ใช้ CSS transform เพราะทำให้ไฟล์ PDF ใหญ่ขึ้นมากในบางเบราว์เซอร์ ใช้กฎขนาดปกติ

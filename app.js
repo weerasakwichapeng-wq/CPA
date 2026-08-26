@@ -785,6 +785,32 @@ function setQuotaFor(rec, q) {
   saveQuotas(store);
 }
 
+/* โควต้ารวมทั้งปี / คงเหลือ (น้ำหนักแห้ง) ของเกษตรกรรายหนึ่ง
+   โควต้ารวมทั้งปี = yieldPerRai (น้ำหนักแห้ง กก./ไร่/ปี จากชีทต้นทาง) × พื้นที่ให้ผลผลิตรวม
+   (tappingArea รวมทุกแปลงของเกษตรกรคนนี้ — ไม่ใช้ productiveArea/fscArea เพราะฟิลด์นั้นมักเป็น 0
+   ผิดพลาดในไฟล์ต้นทาง เหมือนที่ใช้คำนวณ KPI "พื้นที่ FSC รวม" ของหน้ารายละเอียดล็อต)
+   แล้วหักด้วยยอดน้ำหนักแห้งที่ส่งมาแล้วทุกล็อตในปีเดียวกัน (เทียบจาก purchaseDate) รวมล็อตปัจจุบันด้วย */
+function getAnnualDryQuota(memberId, referenceDateStr) {
+  if (!memberId) return null;
+  const refYear = new Date(referenceDateStr || Date.now()).getFullYear();
+  if (isNaN(refYear)) return null;
+  const memberRecs = getAllRecords().filter(x => x.memberId === memberId);
+  if (!memberRecs.length) return null;
+  const yieldPerRai = Number(getQuotaFor(memberRecs[0]).yieldPerRai) || 0;
+  const productiveAreaRai = memberRecs.reduce((s, r) => s + (Number(r.tappingArea) || 0), 0);
+  const annualQuotaKg = yieldPerRai * productiveAreaRai;
+  let deliveredDryKg = 0;
+  loadLots().forEach(l => {
+    if (!l.purchaseDate || new Date(l.purchaseDate).getFullYear() !== refYear) return;
+    const drc = Number(l.drcPercent) || 0;
+    (l.sources || []).forEach(g => {
+      if (g.memberId !== memberId) return;
+      (g.weighings || []).forEach(w => { deliveredDryKg += netWeightKg(w) * (drc / 100); });
+    });
+  });
+  return { annualQuotaKg, deliveredDryKg, remainingDryKg: annualQuotaKg - deliveredDryKg };
+}
+
 /* ============ Utilities ============ */
 function $(sel, root) { return (root || document).querySelector(sel); }
 function $$(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
@@ -4860,50 +4886,65 @@ function renderLotDetail(params) {
     [["front", "หน้ารถ"], ["side", "ข้างรถ"], ["bed", "บนกระบะรถ"]].forEach(([key, label]) => {
       truckPhotosEl.append(renderPhotoThumbLink(truck.photos && truck.photos[key], label));
     });
+
+    // 2. ใบส่งมอบสินค้า (เดิมชื่อ "ปิดรถ") — สถานะปิดรถ + รูปใบปิดรถจากระบบ POP
+    const closure = lot.closure || {};
+    const closureTb = $("#lpsClosureKv tbody");
+    closureTb.innerHTML = "";
+    closureTb.append(el("tr", null, el("td", { class: "lps-k" }, "สถานะ"), el("td", null, closure.closed ? "🔒 ปิดรถแล้ว" : "ยังไม่ปิดรถ")));
+    if (closure.closed) {
+      closureTb.append(el("tr", null, el("td", { class: "lps-k" }, "ปิดเมื่อ"), el("td", null, closure.closedAt ? new Date(closure.closedAt).toLocaleString("th-TH") : "-")));
+    }
+    const closurePhotoEl = $("#lpsClosurePhoto");
+    closurePhotoEl.innerHTML = "";
+    closurePhotoEl.append(renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
+
+    // 3. ใบรับรอง FSC — แยกเป็นหัวข้อของตัวเอง ได้เต็มหน้ากระดาษ (ไม่ถูกจำกัดความสูงเหมือนตอนอยู่รวมกับหัวข้อ 1)
     const truckCertFileEl = $("#lpsTruckCertFile");
     truckCertFileEl.innerHTML = "";
     truckCertFileEl.className = "lps-photo-large lps-cert-photo";
     truckCertFileEl.append(renderCertFileLink(truck.fscCertFile, "ใบรับรอง FSC"));
 
-    // 2. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
+    // 4. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
     const srcTb = $("#lpsSourceTable tbody");
     srcTb.innerHTML = "";
-    let grandGrossWeightKg = 0;
+    let grandGrossWeightKg = 0, grandSackCount = 0;
     const weighingPhotos = [];
     lot.sources.forEach(g => {
-      let deliveryQuota = 0, hasQuotaData = false;
-      (g.plots || []).forEach(plotName => {
-        const pr = allRecs.find(x => x.plot === plotName);
-        if (!pr) return;
-        const dq = Number(getQuotaFor(pr).deliveryPerRound) || 0;
-        if (dq > 0) { deliveryQuota += dq; hasQuotaData = true; }
-      });
-      const groupWeight = (g.weighings || []).reduce((s, w) => s + netWeightKg(w), 0);
-      const overQuota = hasQuotaData && groupWeight > deliveryQuota;
+      const annualQuota = getAnnualDryQuota(g.memberId, lot.purchaseDate);
+      const hasQuotaData = !!annualQuota && annualQuota.annualQuotaKg > 0;
+      const overQuota = hasQuotaData && annualQuota.remainingDryKg < 0;
       const weighings = g.weighings && g.weighings.length ? g.weighings : [];
       const showSubtotal = weighings.length > 1;
-      const rowspan = Math.max(weighings.length, 1) + (showSubtotal ? 1 : 0);
+      // rowspan ครอบเฉพาะแถวรอบชั่งจริง ไม่รวมแถว "รวม" — เพื่อให้แถว "รวม" มีคอลัมน์ 1
+      // (FMU/แปลง/เกษตรกร) เป็นของตัวเอง ไม่ถูกคอลัมน์ 1 ของแถวบนครอบยาวลงมาทับ
+      const rowspan = Math.max(weighings.length, 1);
+      const memberIdMatch = g.memberId ? String(g.memberId).match(/\d{6,}/) : null;
       const groupCell = el("td", { rowspan },
         el("b", null, safe(g.fmu)), ` (${(g.plots || []).join(", ")})`, el("br"),
-        safe(g.nameTh),
+        safe(g.nameTh), memberIdMatch ? el("span", { class: "lps-member-id" }, ` (${memberIdMatch[0]})`) : "",
       );
       const quotaCell = el("td", { rowspan, class: overQuota ? "lps-quota-bad" : "" },
-        hasQuotaData ? (overQuota ? `⚠️ เกิน (${fmtMoney(deliveryQuota)})` : `ปกติ (${fmtMoney(deliveryQuota)})`) : "-");
+        hasQuotaData
+          ? `${fmtNum(annualQuota.annualQuotaKg, 2)} / ${fmtNum(annualQuota.remainingDryKg, 2)}${overQuota ? " ⚠️" : ""}`
+          : "-");
       if (!weighings.length) {
         srcTb.append(el("tr", null, groupCell, el("td", { colspan: 8 }, "ไม่มีรอบชั่ง"), quotaCell));
         return;
       }
-      let sumContainer = 0, sumWeight = 0, sumNet = 0, sumAmount = 0, sumDry = 0;
+      let sumSack = 0, sumContainer = 0, sumWeight = 0, sumNet = 0, sumAmount = 0, sumDry = 0;
       weighings.forEach((w, wi) => {
         const net = netWeightKg(w);
         const dry = net * (Number(lot.drcPercent) / 100);
         const amount = net * (Number(w.pricePerKg) || 0);
+        sumSack += Number(w.sackCount) || 0;
         sumContainer += Number(w.containerWeightKg) || 0;
         sumWeight += Number(w.weightKg) || 0;
         sumNet += net;
         sumAmount += amount;
         sumDry += dry;
         grandGrossWeightKg += Number(w.weightKg) || 0;
+        grandSackCount += Number(w.sackCount) || 0;
         const tr = el("tr", { class: overQuota ? "lps-over-quota" : "" });
         if (wi === 0) tr.append(groupCell);
         tr.append(
@@ -4925,12 +4966,14 @@ function renderLotDetail(params) {
       if (showSubtotal) {
         srcTb.append(el("tr", { class: "lps-subtotal-row" },
           el("td", null, el("b", null, "รวม")),
+          el("td", { class: "lps-num" }, fmtNum(sumSack, 0)),
           el("td", { class: "lps-num" }, fmtNum(sumContainer, 2)),
           el("td", { class: "lps-num" }, fmtNum(sumWeight, 2)),
           el("td", { class: "lps-num" }, fmtNum(sumNet, 2)),
           el("td", null, ""),
           el("td", { class: "lps-num" }, fmtMoney(sumAmount)),
           el("td", { class: "lps-num" }, fmtNum(sumDry, 2)),
+          el("td", null, ""),
           el("td", null, ""),
         ));
       }
@@ -4939,7 +4982,7 @@ function renderLotDetail(params) {
     srcTf.innerHTML = "";
     srcTf.append(el("tr", { class: "lps-total-row" },
       el("td", null, "รวมทั้งหมด"),
-      el("td", null, ""),
+      el("td", { class: "lps-num" }, fmtNum(grandSackCount, 0)),
       el("td", null, ""),
       el("td", { class: "lps-num" }, fmtNum(grandGrossWeightKg, 2)),
       el("td", { class: "lps-num" }, fmtNum(totals.totalWeightKg, 2)),
@@ -4960,7 +5003,7 @@ function renderLotDetail(params) {
       weighingPhotosTitle.style.display = "none";
     }
 
-    // 3. ใบเสร็จรับเงิน (แนบได้หลายใบ) — เอกสารเป็นแถบยาวแนวตั้ง หมุนเป็นแนวนอนให้พอดีหน้ากระดาษ
+    // 5. ใบเสร็จรับเงิน (แนบได้หลายใบ) — เอกสารเป็นแถบยาวแนวตั้ง หมุนเป็นแนวนอนให้พอดีหน้ากระดาษ
     const receiptEl = $("#lpsReceiptPhoto");
     receiptEl.innerHTML = "";
     const lpsReceiptPhotos = lot.receiptPhotos && lot.receiptPhotos.length ? lot.receiptPhotos : [null];
@@ -4968,19 +5011,6 @@ function renderLotDetail(params) {
       const link = renderPhotoThumbLink(p, `ใบเสร็จรับเงิน${lpsReceiptPhotos.length > 1 ? " " + (i + 1) : ""}`);
       receiptEl.append(link);
     });
-
-    // 4. ปิดรถ
-    const closure = lot.closure || {};
-    const closureTb = $("#lpsClosureKv tbody");
-    closureTb.innerHTML = "";
-    closureTb.append(el("tr", null, el("td", { class: "lps-k" }, "สถานะ"), el("td", null, closure.closed ? "🔒 ปิดรถแล้ว" : "ยังไม่ปิดรถ")));
-    if (closure.closed) {
-      closureTb.append(el("tr", null, el("td", { class: "lps-k" }, "ปิดเมื่อ"), el("td", null, closure.closedAt ? new Date(closure.closedAt).toLocaleString("th-TH") : "-")));
-    }
-    const closurePhotoEl = $("#lpsClosurePhoto");
-    closurePhotoEl.innerHTML = "";
-    const closureLink = renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)");
-    closurePhotoEl.append(closureLink);
 
     // หมายเหตุ
     const notesSection = $("#lpsNotesSection");

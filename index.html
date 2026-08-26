@@ -882,28 +882,40 @@
           <tbody id="lpsMeta"></tbody>
         </table>
 
-        <div class="lps-section">
-          <div class="lps-sec-title"><span class="lps-sec-num">1</span> ตรวจเช็ครถขนส่ง</div>
-          <table class="lps-kv-table" id="lpsTruckKv"><tbody></tbody></table>
-          <div class="lps-photo-grid" id="lpsTruckPhotos"></div>
+        <div class="lps-section-group">
+          <div class="lps-section">
+            <div class="lps-sec-title"><span class="lps-sec-num">1</span> ตรวจเช็ครถขนส่ง</div>
+            <table class="lps-kv-table" id="lpsTruckKv"><tbody></tbody></table>
+            <div class="lps-photo-grid" id="lpsTruckPhotos"></div>
+          </div>
+
+          <div class="lps-section">
+            <div class="lps-sec-title"><span class="lps-sec-num">2</span> ใบส่งมอบสินค้า</div>
+            <table class="lps-kv-table" id="lpsClosureKv"><tbody></tbody></table>
+            <div class="lps-photo-large" id="lpsClosurePhoto"></div>
+          </div>
+        </div>
+
+        <div class="lps-section lps-section-cert">
+          <div class="lps-sec-title"><span class="lps-sec-num">3</span> ใบรับรอง FSC</div>
           <div id="lpsTruckCertFile"></div>
         </div>
 
         <div class="lps-section">
-          <div class="lps-sec-title"><span class="lps-sec-num">2</span> แปลงต้นทาง (Source Plots)</div>
+          <div class="lps-sec-title"><span class="lps-sec-num">4</span> แปลงต้นทาง (Source Plots)</div>
           <table class="lps-table" id="lpsSourceTable">
             <thead>
               <tr>
                 <th>FMU / แปลง / เกษตรกร</th>
                 <th>จำนวน<br>กระสอบ</th>
-                <th>หักภาชนะ<br>(กก.)</th>
-                <th>น้ำหนัก<br>(กก.)</th>
-                <th>น้ำหนักสุทธิ<br>(หลังหักภาชนะ)</th>
-                <th>ราคา<br>/กก.</th>
-                <th>ยอดเงิน<br>(฿)</th>
+                <th>หักน้ำหนักกระสอบ<br>(กก.)</th>
+                <th>น้ำหนัก<br>(กก./สด)</th>
+                <th>น้ำหนักสุทธิ<br>(กก./สด)</th>
+                <th>ราคา<br>(บ./กก.สด)</th>
+                <th>ยอดเงิน<br>(บาท)</th>
                 <th>DRC แห้ง<br>(กก.)</th>
-                <th>ใบชั่ง</th>
-                <th>โควต้า/รอบ</th>
+                <th>ใบชั่ง<br>(No.)</th>
+                <th>โควต้ารวมทั้งปี /<br>คงเหลือ (น้ำหนักแห้ง)</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -914,18 +926,12 @@
         </div>
 
         <div class="lps-section">
-          <div class="lps-sec-title"><span class="lps-sec-num">3</span> ใบเสร็จรับเงิน</div>
+          <div class="lps-sec-title"><span class="lps-sec-num">5</span> ใบเสร็จรับเงิน</div>
           <div class="lps-photo-large" id="lpsReceiptPhoto"></div>
         </div>
 
-        <div class="lps-section">
-          <div class="lps-sec-title"><span class="lps-sec-num">4</span> ปิดรถ</div>
-          <table class="lps-kv-table" id="lpsClosureKv"><tbody></tbody></table>
-          <div class="lps-photo-large" id="lpsClosurePhoto"></div>
-        </div>
-
         <div class="lps-section" id="lpsNotesSection">
-          <div class="lps-sec-title"><span class="lps-sec-num">5</span> หมายเหตุ</div>
+          <div class="lps-sec-title"><span class="lps-sec-num">6</span> หมายเหตุ</div>
           <div id="lpsNotes"></div>
         </div>
 
