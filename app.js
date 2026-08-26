@@ -5075,6 +5075,26 @@ function renderLotDetail(params) {
     $("#lpsFooter").textContent = `พิมพ์เมื่อ ${new Date().toLocaleString("th-TH", { dateStyle: "long", timeStyle: "short" })} · โดย ${me.displayName || me.username || "-"} · เอกสารนี้สร้างจากระบบตรวจสอบย้อนกลับยางพารา FSC`;
   }
   renderPrintSheet();
+  // ── TEMP DEBUG — โชว์ใบรับรอง FSC ทั้ง 4 ทิศ (0/90/180/270°) เป็นแถบคาดบนสุดของหน้าจอ (ไม่พิมพ์ลง
+  //    กระดาษ) เพื่อให้เทียบเลือกทิศที่ถูกต้องได้ตรงๆ โดยไม่ต้องเดา — ลบออกหลังยืนยันทิศที่ใช้จริงแล้ว ──
+  (async () => {
+    const certFile = lot.truck && lot.truck.fscCertFile;
+    if (!isPdfFile(certFile)) return;
+    const src = certFile.url || certFile.data;
+    const dbg = el("div", {
+      style: "position:fixed;top:0;left:0;right:0;z-index:99999;background:#fff3cd;border-bottom:3px solid #d32f2f;" +
+        "padding:8px;display:flex;gap:10px;overflow-x:auto;align-items:flex-start;font-family:sans-serif;",
+    }, el("div", { style: "font-weight:700;padding:8px;white-space:nowrap;" }, "DEBUG ใบรับรอง FSC:"));
+    document.body.prepend(dbg);
+    for (const r of [0, 90, 180, 270]) {
+      const box = el("div", { style: "text-align:center" }, el("div", { style: "font-weight:700" }, r + "°"));
+      dbg.append(box);
+      try {
+        const dataUrl = await renderPdfFirstPageAsDataUrl(src, 300, r);
+        box.append(el("img", { src: dataUrl, style: "height:180px;border:1px solid #333" }));
+      } catch (e) { box.append(el("div", null, "error")); console.error("debug render", r, e); }
+    }
+  })();
   // ย่อรูปทุกใบในเอกสารพิมพ์ให้เหลือความละเอียดพอสำหรับกระดาษ (ไม่ใช่ต้นฉบับ 4K) — ไฟล์ PDF ที่
   // ได้จาก "พิมพ์ → บันทึกเป็น PDF" จะเล็กลงมาก เพราะเบราว์เซอร์ฝัง resolution จริงของรูปลงไฟล์เสมอ
   // ไม่ว่า CSS จะย่อขนาดที่แสดงผลแค่ไหนก็ตาม จึงต้องย่อไฟล์รูปจริงๆ ก่อนพิมพ์
