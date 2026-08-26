@@ -1241,6 +1241,18 @@ async function renderPdfFirstPageAsDataUrl(url, maxDim) {
   canvas.width = Math.round(viewport.width);
   canvas.height = Math.round(viewport.height);
   await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+  // เอกสารในรายงานควรเป็นแนวตั้งเสมอ — ถ้าหน้า PDF ต้นฉบับกว้างกว่าสูง (แนวนอน) หมุน 90°
+  // เป็นพิกเซลจริงผ่าน canvas (แบบเดียวกับที่ processPrintPhoto ทำกับรูปถ่ายเอกสารแนวยาว)
+  if (canvas.width > canvas.height) {
+    const rotated = document.createElement("canvas");
+    rotated.width = canvas.height;
+    rotated.height = canvas.width;
+    const rctx = rotated.getContext("2d");
+    rctx.translate(rotated.width, 0);
+    rctx.rotate(Math.PI / 2);
+    rctx.drawImage(canvas, 0, 0);
+    return rotated.toDataURL("image/jpeg", 0.85);
+  }
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 if (window.pdfjsLib) {
