@@ -3089,8 +3089,13 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   /* .detail-map (แผนที่ดาวเทียม Leaflet บนหน้าจอ) ต้องซ่อนตอนพิมพ์เสมอ ไม่ว่าจะอยู่หน้าไหน —
      ถ้าเบราว์เซอร์พยายาม rasterize แผนที่ภาพถ่ายดาวเทียมสดๆ ลง PDF จะได้ไฟล์ใหญ่มาก
      (พบเคสจริงว่าไฟล์ขึ้นไปหลักร้อย MB) แก้ด้วย selector ตรงๆ ไม่พึ่งพา .dash-grid-12
-     ที่ scope เฉพาะ .page-lot-detail เพียงจุดเดียว กันไว้อีกชั้นให้ชัวร์ */
-  .topbar, .mainnav, .footer, .back-link, .actions-bar, .no-print, .user-chip, .sync-stale-banner, .detail-map { display: none !important; }
+     ที่ scope เฉพาะ .page-lot-detail เพียงจุดเดียว กันไว้อีกชั้นให้ชัวร์
+     .dash-grid-12/.lot-detail-header ก็ใส่ไว้ตรงนี้ด้วยเหตุผลเดียวกัน — เจอเคสจริงว่าตาราง
+     "แปลงต้นทางในล็อตนี้" บนจอ (#lotSourceTable) หลุดมาโผล่ในเอกสารพิมพ์แม้จะมี
+     ".page-lot-detail .dash-grid-12 { display:none }" อยู่แล้วก็ตาม ไม่มีหน้าไหนในระบบพิมพ์
+     dashboard ตรงๆ (ทุกหน้าใช้ print-sheet เฉพาะของตัวเอง) จึงซ่อนได้แบบไม่จำกัด scope */
+  .topbar, .mainnav, .footer, .back-link, .actions-bar, .no-print, .user-chip, .sync-stale-banner,
+  .detail-map, .dash-grid-12, .lot-detail-header { display: none !important; }
   .panel, .detail-header { box-shadow: none; border: 1px solid #ddd; }
   main { padding: 0 !important; max-width: none !important; margin: 0 !important; }
 
