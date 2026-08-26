@@ -1231,9 +1231,8 @@ function isPdfFile(file) {
 }
 /* เรนเดอร์หน้าแรกของไฟล์ PDF เป็นรูปภาพ (data URL) ด้วย PDF.js — ใช้เฉพาะในเอกสารพิมพ์ เพราะ
    <embed>/<iframe> ของ PDF ไม่ถูกพิมพ์ลง PDF/กระดาษ (เบราว์เซอร์ไม่ rasterize plugin viewer)
-   ไฟล์ต้นฉบับ (ยืนยันแล้ว) เป็นแนวนอนจริง (เช่น export มาจาก Power BI) — ให้เต็มหน้ากระดาษ A4
-   แนวตั้งของรายงาน จึงหมุนเนื้อหา 90° ตามพิกเซลจริง (แบบเดียวกับที่ processPrintPhoto หมุนรูป
-   เอกสารแนวยาวอื่นๆ) แทนที่จะปล่อยให้แสดงเล็กแคบเหลือแค่ความกว้างหน้ากระดาษ */
+   หมายเหตุ: ที่นี่ "ไม่หมุน" — ปล่อยให้ processPrintPhoto จัดการทิศทางที่เดียว (ตามชนิดเอกสาร)
+   เหมือนกับไฟล์ที่แนบมาเป็นรูปภาพ ไม่งั้น PDF จะโดนหมุนซ้ำสองรอบ */
 async function renderPdfFirstPageAsDataUrl(url, maxDim) {
   const pdf = await pdfjsLib.getDocument(url).promise;
   const page = await pdf.getPage(1);
@@ -1244,16 +1243,6 @@ async function renderPdfFirstPageAsDataUrl(url, maxDim) {
   canvas.width = Math.round(viewport.width);
   canvas.height = Math.round(viewport.height);
   await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-  if (canvas.width > canvas.height) {
-    const rotated = document.createElement("canvas");
-    rotated.width = canvas.height;
-    rotated.height = canvas.width;
-    const rctx = rotated.getContext("2d");
-    rctx.translate(0, rotated.height);
-    rctx.rotate(-Math.PI / 2);
-    rctx.drawImage(canvas, 0, 0);
-    return rotated.toDataURL("image/jpeg", 0.85);
-  }
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 if (window.pdfjsLib) {
@@ -1274,12 +1263,16 @@ function renderPrintCertFile(container, file, label) {
     el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
   ));
   return renderPdfFirstPageAsDataUrl(src, 1600).then(dataUrl => {
+    const img = el("img", { src: dataUrl, alt: label || file.name, class: "lot-photo-thumb-img" });
     const link = el("a", { href: src, target: "_blank", rel: "noopener", class: "lot-photo-thumb-link" },
-      el("img", { src: dataUrl, alt: label || file.name, class: "lot-photo-thumb-img" }),
+      img,
       el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
     );
     container.innerHTML = "";
     container.append(link);
+    // รูปนี้เพิ่งถูกใส่เข้า DOM หลัง downscalePrintPhotos() รันไปแล้ว (เรนเดอร์ PDF เป็น async)
+    // จึงต้องเรียก processPrintPhoto เองตรงนี้ ไม่งั้นจะไม่ถูกจัดทิศทาง/ย่อขนาดเหมือนรูปอื่น
+    return processPrintPhoto(img, 1600, 0.85);
   }).catch(err => { console.error("renderPdfFirstPageAsDataUrl failed:", err); });
 }
 /* Overlay แสดงรูปเต็มจอ ใช้แทน window.open()/target=_blank ทุกจุด — ใช้ได้ทั้ง data: URI
@@ -1295,30 +1288,49 @@ function openImagePreview(src, caption) {
   overlay.querySelector(".img-preview-close").onclick = () => overlay.remove();
   document.body.append(overlay);
 }
+/* ทิศทางที่เอกสารแต่ละชนิด "ควรจะเป็น" บนกระดาษ — ตัดสินจากชนิดเอกสารที่เดียวตรงนี้ที่เดียว
+   (เมื่อก่อนใช้เงื่อนไขเดียวคือ "อยู่ใน .lps-photo-large ไหม" ซึ่งเหมารวมใบรับรอง FSC เข้าไปด้วย
+   ทำให้ใบรับรองที่เป็นแนวตั้งอยู่แล้วถูกหมุนเป็นแนวนอนทุกครั้ง อ่านไม่ได้)
+   - ใบรับรอง FSC → แนวตั้งเสมอ (เอกสารเต็มหน้า ต้องอ่านตรงๆ) หมุนซ้ายถ้าต้นฉบับเป็นแนวนอน
+   - ใบเสร็จ / ใบปิดรถ POP → แนวนอนเสมอ (เป็นแถบยาวแนวตั้ง หมุนแล้วเต็มความกว้างหน้ากระดาษ)
+   - รูปอื่น (ตรวจรถ / หน้างานชั่ง) → ใช้ตามต้นฉบับ ไม่หมุน */
+function wantedPrintOrientation(img) {
+  if (img.closest(".lps-cert-photo")) return { want: "portrait", ccw: true };
+  if (img.closest(".lps-photo-large")) return { want: "landscape", ccw: false };
+  return null;
+}
 /* ประมวลผลรูปเดียวก่อนพิมพ์ — "หมุน + ย่อ" ในขั้นตอนเดียวแบบ atomic (ไม่แยกเป็น 2 ฟังก์ชัน
    ที่ต่างคน fetch/เขียน img.src ของตัวเองแบบ async อิสระกัน) เพราะเคยพบว่าถ้าแยกกัน ตัวที่
    เขียนเสร็จทีหลังจะเขียนทับผลของอีกตัว — เช่น รูปหมุนเสร็จ (แต่ความละเอียดเต็ม) ไปเขียนทับ
    รูปที่ย่อไปแล้ว ทำให้ไฟล์ตอนพิมพ์ยังใหญ่อยู่ทั้งที่ย่อไปแล้ว
-   - เอกสารแนวตั้งยาว (ใบเสร็จ/POP ใน .lps-photo-large) จะหมุน 90° เป็นพิกเซลจริงผ่าน canvas
-     ก่อน (ไม่ใช้ CSS transform เพราะทำให้บางเบราว์เซอร์ rasterize ทั้งหน้าตอนบันทึกเป็น PDF)
+   - หมุนตามทิศที่ wantedPrintOrientation() กำหนด เป็นพิกเซลจริงผ่าน canvas (ไม่ใช้ CSS transform
+     เพราะทำให้บางเบราว์เซอร์ rasterize ทั้งหน้าตอนบันทึกเป็น PDF)
    - จากนั้นย่อด้านยาวสุดให้ไม่เกิน maxDim px เสมอ (รูปจากกล้องอาจสูงถึง 4K) */
 function processPrintPhoto(img, maxDim, quality) {
   return new Promise(resolve => {
     const src = img.src;
     if (!src) { resolve(); return; }
-    const shouldRotate = !!img.closest(".lps-photo-large");
+    const orient = wantedPrintOrientation(img);
     const probe = new Image();
     probe.crossOrigin = "anonymous";
     probe.onload = () => {
       try {
         const isPortrait = probe.naturalWidth < probe.naturalHeight;
+        // หมุนเฉพาะเมื่อทิศปัจจุบัน "ไม่ตรง" กับทิศที่ต้องการเท่านั้น — ถ้าตรงอยู่แล้วปล่อยไว้
+        const shouldRotate = !!orient &&
+          (orient.want === "portrait" ? !isPortrait : isPortrait);
         let source = probe, w = probe.naturalWidth, h = probe.naturalHeight;
-        if (shouldRotate && isPortrait) {
+        if (shouldRotate) {
           const rotated = document.createElement("canvas");
           rotated.width = h; rotated.height = w;
           const rctx = rotated.getContext("2d");
-          rctx.translate(rotated.width, 0);
-          rctx.rotate(Math.PI / 2);
+          if (orient.ccw) {           // หมุนซ้าย (ทวนเข็มนาฬิกา)
+            rctx.translate(0, rotated.height);
+            rctx.rotate(-Math.PI / 2);
+          } else {                    // หมุนขวา (ตามเข็มนาฬิกา)
+            rctx.translate(rotated.width, 0);
+            rctx.rotate(Math.PI / 2);
+          }
           rctx.drawImage(probe, 0, 0);
           source = rotated; w = rotated.width; h = rotated.height;
         }
