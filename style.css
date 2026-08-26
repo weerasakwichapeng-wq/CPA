@@ -3247,7 +3247,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   #lpsWeighingPhotos.lps-photo-grid .lot-photo-thumb-img { height: 57mm; }
   #lpsWeighingPhotos .lot-photo-thumb-link { page-break-inside: avoid; }
 
-  /* รูปใบเสร็จรับเงิน/ใบปิดรถ — ขยายเต็มความกว้างหน้ากระดาษ อ่านตัวเลข/ข้อความในเอกสารได้ชัด
+  /* รูปใบเสร็จรับเงิน — ขยายเต็มความกว้างหน้ากระดาษ อ่านตัวเลข/ข้อความในเอกสารได้ชัด
      ใช้ contain (ไม่ crop) เพราะเป็นภาพถ่ายเอกสาร ตัดขอบแล้วอาจเสียข้อมูลสำคัญ */
   .lps-photo-large { display: flex; flex-direction: column; gap: 6mm; }
   .lps-photo-large .lot-photo-thumb-link { width: 100%; page-break-inside: avoid; }
@@ -3260,6 +3260,11 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   }
   .lps-photo-large .lot-photo-thumb-cap { font-size: 8pt; }
   .lps-photo-large .lot-doc-icon { width: 100%; height: 60mm; font-size: 36pt; border: 1px solid #ccc; }
+
+  /* รูปใบปิดรถ (POP) — อยู่ร่วมหน้ากับหัวข้อ 1 ตรวจเช็ครถขนส่ง (.lps-section-group บังคับให้
+     อยู่หน้าเดียวกัน) จึงย่อลงจากเพดาน 150mm ปกติมาก ๆ (แทนที่จะแค่ 80mm ซึ่งยังรวมกับหัวข้อ 1
+     แล้วเกิน 1 หน้าอยู่ดี) กันเนื้อหารวมทั้งหน้าล้นจนถูกดันไปหน้าถัดไปทั้งกลุ่ม */
+  #lpsClosurePhoto .lot-photo-thumb-img { max-height: 55mm; }
 
   /* ใบรับรอง FSC — อยู่ในหัวข้อของตัวเอง (.lps-section-cert บังคับขึ้นหน้าใหม่ + จบหน้า)
      จึงขยายได้เต็มพื้นที่ที่เหลือของหน้ากระดาษ อ่านรายละเอียดในใบรับรองได้ชัดเจน */
