@@ -1,13 +1,13 @@
 # Extract Member Data -> data/members.js
 # -----------------------------------------------------------------
 # Source: Google Sheets (public, no login)
-# URL:    https://docs.google.com/spreadsheets/d/1CNqJ_okTGFvDI0NlzyqH3rpp3NV7o-Bz
+# URL:    https://docs.google.com/spreadsheets/d/1OFTuOdUhjgJ0sBms3FUd7PL0u_RKVaVX
 # Re-run this script anytime to sync latest changes from the sheet.
 
 $ErrorActionPreference = 'Stop'
 
 # === Config ===
-$SheetId   = '1CNqJ_okTGFvDI0NlzyqH3rpp3NV7o-Bz'
+$SheetId   = '1OFTuOdUhjgJ0sBms3FUd7PL0u_RKVaVX'
 $ExportUrl = "https://docs.google.com/spreadsheets/d/$SheetId/export?format=xlsx"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -41,14 +41,22 @@ try {
         $i++
     }
 
-    # Use sheet 9 (same as original Excel layout). Override with $env:SHEET_INDEX if needed.
-    $memberSheetIdx = if ($env:SHEET_INDEX) { [int]$env:SHEET_INDEX } else { 9 }
-    if ($wb.Sheets.Count -lt $memberSheetIdx) {
-        throw ("Workbook has only " + $wb.Sheets.Count + " sheets but requested index " + $memberSheetIdx)
+    # Select by sheet NAME "Member Data" (tab position shifts when sheets are
+    # inserted/reordered upstream, so index alone isn't reliable). Override
+    # with $env:SHEET_INDEX to force a specific position if needed.
+    if ($env:SHEET_INDEX) {
+        $memberSheetIdx = [int]$env:SHEET_INDEX
+        if ($wb.Sheets.Count -lt $memberSheetIdx) {
+            throw ("Workbook has only " + $wb.Sheets.Count + " sheets but requested index " + $memberSheetIdx)
+        }
+        $ws = $wb.Sheets.Item($memberSheetIdx)
+    } else {
+        $ws = $null
+        foreach ($s in $wb.Sheets) { if ($s.Name -eq 'Member Data') { $ws = $s; break } }
+        if (-not $ws) { throw "Could not find a sheet named 'Member Data' in the workbook" }
     }
-    $ws = $wb.Sheets.Item($memberSheetIdx)
     Write-Host ""
-    Write-Host ("Using sheet [" + $memberSheetIdx + "]: " + $ws.Name)
+    Write-Host ("Using sheet: " + $ws.Name)
     Write-Host ("Rows: " + $ws.UsedRange.Rows.Count + " | Cols: " + $ws.UsedRange.Columns.Count)
 
     # Field -> column-number mapping (from explore-excel.ps1)
