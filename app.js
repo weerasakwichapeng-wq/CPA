@@ -1231,28 +1231,21 @@ function isPdfFile(file) {
 }
 /* เรนเดอร์หน้าแรกของไฟล์ PDF เป็นรูปภาพ (data URL) ด้วย PDF.js — ใช้เฉพาะในเอกสารพิมพ์ เพราะ
    <embed>/<iframe> ของ PDF ไม่ถูกพิมพ์ลง PDF/กระดาษ (เบราว์เซอร์ไม่ rasterize plugin viewer) */
-async function renderPdfFirstPageAsDataUrl(url, maxDim) {
+async function renderPdfFirstPageAsDataUrl(url, maxDim, extraRotation) {
   const pdf = await pdfjsLib.getDocument(url).promise;
   const page = await pdf.getPage(1);
-  const baseViewport = page.getViewport({ scale: 1 });
+  // ไฟล์ต้นฉบับ (สแกน/ครอปมาเป็นรูปแล้ววางลง PDF) มักไม่ได้ตั้งค่า /Rotate ให้ตรง — ขนาดหน้า
+  // (MediaBox) เป็นแนวตั้งอยู่แล้ว แต่ "เนื้อหา" ในหน้ากลับเอียง 90° ตรวจจากสัดส่วน canvas
+  // เพียงอย่างเดียวไม่พอ (ความกว้าง/สูงของหน้าไม่ได้บอกว่าเนื้อหาข้างในเอียงหรือเปล่า) จึงรับ
+  // extraRotation มาบวกเพิ่มจาก rotation เดิมของหน้า แล้วให้ pdf.js หมุนเนื้อหาให้ตรงๆ เลย
+  const rotation = (page.rotate + (extraRotation || 0)) % 360;
+  const baseViewport = page.getViewport({ scale: 1, rotation });
   const scale = maxDim / Math.max(baseViewport.width, baseViewport.height);
-  const viewport = page.getViewport({ scale });
+  const viewport = page.getViewport({ scale, rotation });
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(viewport.width);
   canvas.height = Math.round(viewport.height);
   await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-  // เอกสารในรายงานควรเป็นแนวตั้งเสมอ — ถ้าหน้า PDF ต้นฉบับกว้างกว่าสูง (แนวนอน) หมุน 90°
-  // เป็นพิกเซลจริงผ่าน canvas (แบบเดียวกับที่ processPrintPhoto ทำกับรูปถ่ายเอกสารแนวยาว)
-  if (canvas.width > canvas.height) {
-    const rotated = document.createElement("canvas");
-    rotated.width = canvas.height;
-    rotated.height = canvas.width;
-    const rctx = rotated.getContext("2d");
-    rctx.translate(rotated.width, 0);
-    rctx.rotate(Math.PI / 2);
-    rctx.drawImage(canvas, 0, 0);
-    return rotated.toDataURL("image/jpeg", 0.85);
-  }
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 if (window.pdfjsLib) {
@@ -1272,7 +1265,7 @@ function renderPrintCertFile(container, file, label) {
     el("div", { class: "lot-doc-icon" }, "📄"),
     el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
   ));
-  return renderPdfFirstPageAsDataUrl(src, 1600).then(dataUrl => {
+  return renderPdfFirstPageAsDataUrl(src, 1600, 90).then(dataUrl => {
     const link = el("a", { href: src, target: "_blank", rel: "noopener", class: "lot-photo-thumb-link" },
       el("img", { src: dataUrl, alt: label || file.name, class: "lot-photo-thumb-img" }),
       el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
