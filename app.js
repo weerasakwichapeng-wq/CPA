@@ -1230,12 +1230,13 @@ function isPdfFile(file) {
   return !!(file && ((file.type && file.type === "application/pdf") || (file.name && /\.pdf$/i.test(file.name))));
 }
 /* เรนเดอร์หน้าแรกของไฟล์ PDF เป็นรูปภาพ (data URL) ด้วย PDF.js — ใช้เฉพาะในเอกสารพิมพ์ เพราะ
-   <embed>/<iframe> ของ PDF ไม่ถูกพิมพ์ลง PDF/กระดาษ (เบราว์เซอร์ไม่ rasterize plugin viewer) */
+   <embed>/<iframe> ของ PDF ไม่ถูกพิมพ์ลง PDF/กระดาษ (เบราว์เซอร์ไม่ rasterize plugin viewer)
+   ไฟล์ต้นฉบับ (ยืนยันแล้ว) เป็นแนวนอนจริง (เช่น export มาจาก Power BI) — ให้เต็มหน้ากระดาษ A4
+   แนวตั้งของรายงาน จึงหมุนเนื้อหา 90° ตามพิกเซลจริง (แบบเดียวกับที่ processPrintPhoto หมุนรูป
+   เอกสารแนวยาวอื่นๆ) แทนที่จะปล่อยให้แสดงเล็กแคบเหลือแค่ความกว้างหน้ากระดาษ */
 async function renderPdfFirstPageAsDataUrl(url, maxDim) {
   const pdf = await pdfjsLib.getDocument(url).promise;
   const page = await pdf.getPage(1);
-  // page.rotate = ค่า /Rotate ที่ฝังในไฟล์ PDF เอง — ปล่อยให้ getViewport() ใช้ค่านี้ตามปกติ
-  // (ยืนยันแล้วว่าไฟล์จริงตั้งค่ามาถูกต้อง ไม่ต้องหมุนเพิ่ม)
   const baseViewport = page.getViewport({ scale: 1 });
   const scale = maxDim / Math.max(baseViewport.width, baseViewport.height);
   const viewport = page.getViewport({ scale });
@@ -1243,6 +1244,16 @@ async function renderPdfFirstPageAsDataUrl(url, maxDim) {
   canvas.width = Math.round(viewport.width);
   canvas.height = Math.round(viewport.height);
   await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+  if (canvas.width > canvas.height) {
+    const rotated = document.createElement("canvas");
+    rotated.width = canvas.height;
+    rotated.height = canvas.width;
+    const rctx = rotated.getContext("2d");
+    rctx.translate(rotated.width, 0);
+    rctx.rotate(Math.PI / 2);
+    rctx.drawImage(canvas, 0, 0);
+    return rotated.toDataURL("image/jpeg", 0.85);
+  }
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 if (window.pdfjsLib) {
