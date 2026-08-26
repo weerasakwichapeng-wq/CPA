@@ -1226,6 +1226,49 @@ function renderCertFileLink(file, label) {
     el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name)),
   );
 }
+function isPdfFile(file) {
+  return !!(file && ((file.type && file.type === "application/pdf") || (file.name && /\.pdf$/i.test(file.name))));
+}
+/* เรนเดอร์หน้าแรกของไฟล์ PDF เป็นรูปภาพ (data URL) ด้วย PDF.js — ใช้เฉพาะในเอกสารพิมพ์ เพราะ
+   <embed>/<iframe> ของ PDF ไม่ถูกพิมพ์ลง PDF/กระดาษ (เบราว์เซอร์ไม่ rasterize plugin viewer) */
+async function renderPdfFirstPageAsDataUrl(url, maxDim) {
+  const pdf = await pdfjsLib.getDocument(url).promise;
+  const page = await pdf.getPage(1);
+  const baseViewport = page.getViewport({ scale: 1 });
+  const scale = maxDim / Math.max(baseViewport.width, baseViewport.height);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js";
+}
+/* แสดงไฟล์ที่แนบในเอกสารพิมพ์ — ถ้าเป็น PDF จะเรนเดอร์หน้าแรกเป็นรูปด้วย renderPdfFirstPageAsDataUrl
+   ก่อน (async ต้องรอให้เสร็จก่อนสั่งพิมพ์จริง — ดูตัวแปร certPdfReady ที่ #lotPrintBtn.onclick รออยู่)
+   ถ้าเรนเดอร์ไม่สำเร็จ (ไฟล์เสีย/โหลดไม่ได้) จะเหลือไอคอนเอกสารเดิมไว้ ยังคลิกเปิดไฟล์ได้ปกติ */
+function renderPrintCertFile(container, file, label) {
+  container.innerHTML = "";
+  if (!isPdfFile(file)) {
+    container.append(renderCertFileLink(file, label));
+    return Promise.resolve();
+  }
+  const src = file.url || file.data;
+  container.append(el("div", { class: "lot-photo-thumb-link" },
+    el("div", { class: "lot-doc-icon" }, "📄"),
+    el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
+  ));
+  return renderPdfFirstPageAsDataUrl(src, 1600).then(dataUrl => {
+    const link = el("a", { href: src, target: "_blank", rel: "noopener", class: "lot-photo-thumb-link" },
+      el("img", { src: dataUrl, alt: label || file.name, class: "lot-photo-thumb-img" }),
+      el("div", { class: "lot-photo-thumb-cap" }, label || "", el("br"), el("span", { class: "muted" }, file.name || "")),
+    );
+    container.innerHTML = "";
+    container.append(link);
+  }).catch(err => { console.error("renderPdfFirstPageAsDataUrl failed:", err); });
+}
 /* Overlay แสดงรูปเต็มจอ ใช้แทน window.open()/target=_blank ทุกจุด — ใช้ได้ทั้ง data: URI
    (ตอนรูปกำลังอัพโหลด) และ URL จริงจาก Storage โดยไม่โดนเบราว์เซอร์บล็อกแท็บใหม่ */
 function openImagePreview(src, caption) {
@@ -4862,6 +4905,7 @@ function renderLotDetail(params) {
 
   // ── เอกสาร "ใบสรุปการซื้อ" สำหรับพิมพ์ — สร้างแยกจาก dashboard บนจอ เพราะแผนที่/ตารางแบบ
   //    rowspan/กริดหลายคอลัมน์ พิมพ์ไม่น่าเชื่อถือ (เนื้อหาขาดหาย ตัดหน้าแปลกๆ) ──
+  let certPdfReady = Promise.resolve();
   function renderPrintSheet() {
     $("#lpsCompany").textContent = lot.buyer || "บริษัท เจริญโภคภัณฑ์การเกษตร จำกัด";
 
@@ -4900,10 +4944,10 @@ function renderLotDetail(params) {
     closurePhotoEl.append(renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
 
     // 3. ใบรับรอง FSC — แยกเป็นหัวข้อของตัวเอง ได้เต็มหน้ากระดาษ (ไม่ถูกจำกัดความสูงเหมือนตอนอยู่รวมกับหัวข้อ 1)
+    // ถ้าไฟล์เป็น PDF จะเรนเดอร์หน้าแรกเป็นรูปแบบ async — #lotPrintBtn.onclick รอ certPdfReady ก่อนพิมพ์จริง
     const truckCertFileEl = $("#lpsTruckCertFile");
-    truckCertFileEl.innerHTML = "";
     truckCertFileEl.className = "lps-photo-large lps-cert-photo";
-    truckCertFileEl.append(renderCertFileLink(truck.fscCertFile, "ใบรับรอง FSC"));
+    certPdfReady = renderPrintCertFile(truckCertFileEl, truck.fscCertFile, "ใบรับรอง FSC");
 
     // 4. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
     const srcTb = $("#lpsSourceTable tbody");
@@ -5038,7 +5082,7 @@ function renderLotDetail(params) {
     const label = btn.textContent;
     btn.disabled = true;
     btn.textContent = "⏳ กำลังเตรียมรูปสำหรับพิมพ์...";
-    await printPhotosReady;
+    await Promise.all([printPhotosReady, certPdfReady]);
     btn.disabled = false;
     btn.textContent = label;
     window.print();
