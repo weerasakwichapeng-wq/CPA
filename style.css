@@ -3274,8 +3274,7 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
   /* ใบเสร็จรับเงิน — แสดงเป็นแนวตั้งให้อ่านได้ตรงๆ (ดู wantedPrintOrientation ใน app.js) เอกสาร
      แนวตั้งต้องใช้ "ความสูง" เป็นตัวกำหนดขนาด ถ้าคงเพดาน 150mm เดิมไว้จะเหลือแคบจนอ่านไม่ออก
      จึงขยายเป็น 230mm — หัวข้อนี้เป็นหัวข้อของตัวเอง (.lps-section จะดันไปขึ้นหน้าใหม่เองถ้าไม่พอ) */
-  #lpsReceiptPhoto .lot-photo-thumb-img,
-  #lpsFactoryWeighPhoto .lot-photo-thumb-img { max-height: 230mm; }
+  #lpsReceiptPhoto .lot-photo-thumb-img { max-height: 230mm; }
 
   /* ใบรับรอง FSC — อยู่ในหัวข้อของตัวเอง (.lps-section-cert บังคับขึ้นหน้าใหม่ + จบหน้า)
      จึงขยายได้เต็มพื้นที่ที่เหลือของหน้ากระดาษ อ่านรายละเอียดในใบรับรองได้ชัดเจน */
