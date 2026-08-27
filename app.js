@@ -796,6 +796,16 @@ function setQuotaFor(rec, q) {
   saveQuotas(store);
 }
 
+/* แปลงที่ "ให้ผลผลิต" = มีพื้นที่เปิดกรีดจริง (tappingArea > 0)
+   แปลงที่ยางยังไม่โตพอจะกรีด ชีทต้นทางจะกรอก tappingArea เป็น "-" ไว้ (ปัจจุบันมี 3 แปลง
+   อายุยาง 3-5 ปี) แปลงพวกนี้ยังไม่มีผลผลิตให้รับซื้อ จึงไม่ควรให้เลือกเข้าล็อตได้
+   ใช้ tappingArea เป็นเกณฑ์ ไม่ใช้ productiveArea/fscArea เพราะสองฟิลด์นั้นเป็น 0 ผิดพลาด
+   อยู่หลายแปลงในไฟล์ต้นทาง (จุดอื่นในระบบก็เลี่ยงไปใช้ tappingArea ด้วยเหตุผลเดียวกัน)
+   เช็ค rec.plot ด้วย เพราะมีบางเรคอร์ดที่ไม่มีชื่อแปลงเลย — เลือกเข้าล็อตไปก็อ้างอิงกลับไม่ได้ */
+function isProductivePlot(rec) {
+  return !!rec && !!rec.plot && Number(rec.tappingArea) > 0;
+}
+
 /* โควต้ารวมทั้งปี / คงเหลือ (น้ำหนักแห้ง) ของเกษตรกรรายหนึ่ง
    โควต้ารวมทั้งปี = yieldPerRai (น้ำหนักแห้ง กก./ไร่/ปี จากชีทต้นทาง) × พื้นที่ให้ผลผลิตรวม
    (tappingArea รวมทุกแปลงของเกษตรกรคนนี้ — ไม่ใช้ productiveArea/fscArea เพราะฟิลด์นั้นมักเป็น 0
@@ -4573,13 +4583,21 @@ function renderLotForm(params) {
     const q = sInput.value.trim().toLowerCase();
     sugBox.innerHTML = "";
     if (!q) { sugBox.style.display = "none"; return; }
-    const matches = allRecs.filter(m => {
+    const hits = allRecs.filter(m => {
       const blob = `${m.fmu} ${m.plot} ${m.memberId} ${m.nameTh} ${m.nameEn}`.toLowerCase();
       return blob.includes(q);
-    }).slice(0, 12);
+    });
+    // ซ่อนแปลงที่ยังไม่ให้ผลผลิต (ยางยังไม่เปิดกรีด) — กันพนักงานเผลอเลือกใส่ล็อต/รายงาน
+    const usable = hits.filter(isProductivePlot);
+    const hiddenCount = hits.length - usable.length;
+    const matches = usable.slice(0, 12);
     if (!matches.length) {
       sugBox.style.display = "block";
-      sugBox.append(el("div", { class: "src-sug-empty muted" }, "ไม่พบแปลงที่ตรงคำค้น"));
+      // แยกข้อความสองกรณี ไม่งั้นพนักงานจะงงว่าพิมพ์ชื่อแปลงถูกแล้วทำไมหาไม่เจอ
+      sugBox.append(el("div", { class: "src-sug-empty muted" },
+        hiddenCount
+          ? `พบ ${hiddenCount} แปลงที่ตรงคำค้น แต่ยังไม่เปิดกรีด (ไม่มีผลผลิต) จึงเลือกเข้าล็อตไม่ได้`
+          : "ไม่พบแปลงที่ตรงคำค้น"));
       return;
     }
     sugBox.style.display = "block";
@@ -4625,6 +4643,11 @@ function renderLotForm(params) {
       );
       sugBox.append(row);
     });
+    // มีผลลัพธ์ใช้ได้อยู่ แต่บางแปลงถูกซ่อน — บอกไว้ให้รู้ว่าซ่อนเพราะอะไร ไม่ใช่ระบบหาไม่เจอ
+    if (hiddenCount) {
+      sugBox.append(el("div", { class: "src-sug-empty muted" },
+        `(ซ่อน ${hiddenCount} แปลงที่ยังไม่เปิดกรีด — ไม่มีผลผลิตให้รับซื้อ)`));
+    }
   }
   sInput.addEventListener("input", renderSuggestions);
   document.addEventListener("click", e => {
