@@ -386,6 +386,8 @@ function setLotsCache(arr) {
   all.forEach(l => {
     l.sources = migrateLotSources(l.sources);
     if (!l.receiptPhotos) l.receiptPhotos = l.receiptPhoto ? [l.receiptPhoto] : [];
+    // ล็อตเก่าที่บันทึกไว้ก่อนมีช่องใบชั่งน้ำหนักรถที่โรงงาน — ให้เป็น array ว่างไว้ก่อน
+    if (!l.factoryWeighPhotos) l.factoryWeighPhotos = [];
   });
   _lotsCache = all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
@@ -1291,13 +1293,15 @@ function openImagePreview(src, caption) {
 /* ทิศทางที่เอกสารแต่ละชนิด "ควรจะเป็น" บนกระดาษ — ตัดสินจากชนิดเอกสารที่เดียวตรงนี้ที่เดียว
    (เมื่อก่อนใช้เงื่อนไขเดียวคือ "อยู่ใน .lps-photo-large ไหม" ซึ่งเหมารวมทุกเอกสารแนบเข้าไปด้วย
    ทำให้เอกสารที่เป็นแนวตั้งอยู่แล้วถูกหมุนเป็นแนวนอนทุกครั้ง อ่านไม่ได้)
-   - ใบรับรอง FSC / ใบเสร็จรับเงิน → แนวตั้งเสมอ ให้อ่านได้ตรงๆ (หมุนซ้ายถ้าต้นฉบับเป็นแนวนอน)
-     ทั้งคู่มีหัวข้อเป็นของตัวเอง จึงมีที่ว่างพอให้แสดงเป็นแนวตั้งได้เต็มที่
+   - ใบรับรอง FSC / ใบเสร็จรับเงิน / ใบชั่งน้ำหนักรถที่โรงงาน → แนวตั้งเสมอ ให้อ่านได้ตรงๆ
+     (หมุนซ้ายถ้าต้นฉบับเป็นแนวนอน) ทั้งหมดมีหัวข้อเป็นของตัวเอง จึงมีที่ว่างพอให้แสดงเต็มที่
    - ใบปิดรถ POP → แนวนอน เพราะถูกจำกัดความสูงไว้แค่ 55mm เพื่อให้อยู่หน้าเดียวกับหัวข้อ 1
      ถ้าหมุนตั้งในกรอบเตี้ยขนาดนั้นจะเหลือแคบจนอ่านไม่ออก
    - รูปอื่น (ตรวจรถ / หน้างานชั่ง) → ใช้ตามต้นฉบับ ไม่หมุน */
 function wantedPrintOrientation(img) {
-  if (img.closest(".lps-cert-photo") || img.closest("#lpsReceiptPhoto")) return { want: "portrait", ccw: true };
+  if (img.closest(".lps-cert-photo") || img.closest("#lpsReceiptPhoto") || img.closest("#lpsFactoryWeighPhoto")) {
+    return { want: "portrait", ccw: true };
+  }
   if (img.closest(".lps-photo-large")) return { want: "landscape", ccw: false };
   return null;
 }
@@ -4419,6 +4423,12 @@ function renderLotForm(params) {
   receiptWrap.innerHTML = "";
   receiptWrap.append(buildAuditPhotoWidget("receipt", receiptPhotosHolder, "🧾 แนบรูปใบเสร็จรับเงิน (แนบได้หลายใบ)", { landscape: true }));
 
+  // ── 7. ใบชั่งน้ำหนักรถที่โรงงาน — แนบได้หลายใบ (ชั่งเข้า/ชั่งออก) ──
+  const factoryWeighPhotosHolder = { factoryWeigh: (editing && editing.factoryWeighPhotos) || [] };
+  const factoryWeighWrap = $("#factoryWeighPhotoButton");
+  factoryWeighWrap.innerHTML = "";
+  factoryWeighWrap.append(buildAuditPhotoWidget("factoryWeigh", factoryWeighPhotosHolder, "⚖️ แนบรูปใบชั่งน้ำหนักรถที่โรงงาน (แนบได้หลายใบ)", { landscape: true }));
+
   // ── Source plots manager — จัดกลุ่มตาม FMU (รวมแปลงย่อยเข้าด้วยกัน)
   //    แต่ละ FMU ชั่งได้หลายรอบ (weighings[]) กด "＋ เพิ่มรอบชั่ง" เพื่อเพิ่มรอบใหม่ ──
   const allRecs = getAllRecords();
@@ -4646,6 +4656,7 @@ function renderLotForm(params) {
         fscCertFile: truckCertFile,
       },
       receiptPhotos: receiptPhotosHolder.receipt,
+      factoryWeighPhotos: factoryWeighPhotosHolder.factoryWeigh,
       closure: (editing && editing.closure) || { closed: false, photo: null, closedAt: null },
       sources: sources.map(g => ({
         memberId: g.memberId, fmu: g.fmu, nameTh: g.nameTh, hub: g.hub,
@@ -4763,6 +4774,12 @@ function renderLotDetail(params) {
   receiptEl.innerHTML = "";
   const receiptPhotos = lot.receiptPhotos && lot.receiptPhotos.length ? lot.receiptPhotos : [null];
   receiptPhotos.forEach((p, i) => receiptEl.append(renderPhotoThumbLink(p, `ใบเสร็จรับเงิน${receiptPhotos.length > 1 ? " " + (i + 1) : ""}`)));
+
+  // ── ใบชั่งน้ำหนักรถที่โรงงาน (แนบได้หลายใบ) ──
+  const factoryWeighEl = $("#lotFactoryWeighPhoto");
+  factoryWeighEl.innerHTML = "";
+  const factoryWeighPhotos = lot.factoryWeighPhotos && lot.factoryWeighPhotos.length ? lot.factoryWeighPhotos : [null];
+  factoryWeighPhotos.forEach((p, i) => factoryWeighEl.append(renderPhotoThumbLink(p, `ใบชั่งน้ำหนักรถที่โรงงาน${factoryWeighPhotos.length > 1 ? " " + (i + 1) : ""}`)));
 
   // Source plots table — จัดกลุ่มตาม FMU, แต่ละกลุ่มมีได้หลายรอบชั่ง พร้อมเช็คโควต้าต่อรอบของเกษตรกร
   const tbody = $("#lotSourceTable tbody");
@@ -4976,7 +4993,15 @@ function renderLotDetail(params) {
     truckCertFileEl.className = "lps-photo-large lps-cert-photo";
     certPdfReady = renderPrintCertFile(truckCertFileEl, truck.fscCertFile, "ใบรับรอง FSC");
 
-    // 4. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
+    // 4. ใบชั่งน้ำหนักรถที่โรงงาน (แนบได้หลายใบ — ชั่งเข้า/ชั่งออก)
+    const factoryWeighEl = $("#lpsFactoryWeighPhoto");
+    factoryWeighEl.innerHTML = "";
+    const lpsFactoryWeighPhotos = lot.factoryWeighPhotos && lot.factoryWeighPhotos.length ? lot.factoryWeighPhotos : [null];
+    lpsFactoryWeighPhotos.forEach((p, i) => {
+      factoryWeighEl.append(renderPhotoThumbLink(p, `ใบชั่งน้ำหนักรถที่โรงงาน${lpsFactoryWeighPhotos.length > 1 ? " " + (i + 1) : ""}`));
+    });
+
+    // 5. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
     const srcTb = $("#lpsSourceTable tbody");
     srcTb.innerHTML = "";
     let grandGrossWeightKg = 0, grandSackCount = 0, grandContainerWeightKg = 0;
@@ -5075,7 +5100,7 @@ function renderLotDetail(params) {
       weighingPhotosTitle.style.display = "none";
     }
 
-    // 5. ใบเสร็จรับเงิน (แนบได้หลายใบ) — เอกสารเป็นแถบยาวแนวตั้ง หมุนเป็นแนวนอนให้พอดีหน้ากระดาษ
+    // 6. ใบเสร็จรับเงิน (แนบได้หลายใบ) — แสดงเป็นแนวตั้งให้อ่านได้ตรงๆ (ดู wantedPrintOrientation)
     const receiptEl = $("#lpsReceiptPhoto");
     receiptEl.innerHTML = "";
     const lpsReceiptPhotos = lot.receiptPhotos && lot.receiptPhotos.length ? lot.receiptPhotos : [null];

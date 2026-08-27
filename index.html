@@ -781,6 +781,12 @@
           <div id="receiptPhotoButton"></div>
         </fieldset>
 
+        <fieldset class="full">
+          <legend>7. ใบชั่งน้ำหนักรถที่โรงงาน</legend>
+          <p class="muted" style="margin-top:0">ถ่ายภาพใบชั่งน้ำหนักรถที่โรงงาน (ชั่งเข้า/ชั่งออก) — ระบุวัน/เวลา/พิกัด GPS อัตโนมัติ</p>
+          <div id="factoryWeighPhotoButton"></div>
+        </fieldset>
+
         <div class="actions-bar full">
           <button type="submit" class="btn btn-primary">💾 บันทึกล็อต</button>
           <button type="button" class="btn" id="lotCancelBtn">ยกเลิก</button>
@@ -851,6 +857,11 @@
         </section>
 
         <section class="panel col-12">
+          <div class="chart-head"><h3>⚖️ ใบชั่งน้ำหนักรถที่โรงงาน</h3><span class="chart-sub">Factory weighbridge slip</span></div>
+          <div id="lotFactoryWeighPhoto" class="lot-photo-row"></div>
+        </section>
+
+        <section class="panel col-12">
           <div class="chart-head"><h3>🔒 ปิดรถ (ปิดล็อต)</h3><span class="chart-sub">Truck closure — สำหรับตรวจสอบย้อนกลับ</span></div>
           <div id="lotClosurePanel"></div>
         </section>
@@ -902,7 +913,12 @@
         </div>
 
         <div class="lps-section">
-          <div class="lps-sec-title"><span class="lps-sec-num">4</span> แปลงต้นทาง (Source Plots)</div>
+          <div class="lps-sec-title"><span class="lps-sec-num">4</span> ใบชั่งน้ำหนักรถที่โรงงาน</div>
+          <div class="lps-photo-large" id="lpsFactoryWeighPhoto"></div>
+        </div>
+
+        <div class="lps-section">
+          <div class="lps-sec-title"><span class="lps-sec-num">5</span> แปลงต้นทาง (Source Plots)</div>
           <table class="lps-table" id="lpsSourceTable">
             <thead>
               <tr>
@@ -926,12 +942,12 @@
         </div>
 
         <div class="lps-section">
-          <div class="lps-sec-title"><span class="lps-sec-num">5</span> ใบเสร็จรับเงิน</div>
+          <div class="lps-sec-title"><span class="lps-sec-num">6</span> ใบเสร็จรับเงิน</div>
           <div class="lps-photo-large" id="lpsReceiptPhoto"></div>
         </div>
 
         <div class="lps-section" id="lpsNotesSection">
-          <div class="lps-sec-title"><span class="lps-sec-num">6</span> หมายเหตุ</div>
+          <div class="lps-sec-title"><span class="lps-sec-num">7</span> หมายเหตุ</div>
           <div id="lpsNotes"></div>
         </div>
 
@@ -1355,6 +1371,6 @@
   <script src="data/wdpa.js"></script>
   <script src="data/bufferzone.js?v=2026072401"></script>
   <script src="data/satellite-config.js"></script>
-  <script src="app.js?v=2026082628"></script>
+  <script src="app.js?v=2026082629"></script>
 </body>
 </html>
