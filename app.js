@@ -90,6 +90,15 @@ const LS_AUDITS = "fsc_audits";      // array of field audit records
 const LS_USERS = "fsc_users";        // array of users (override window.USERS)
 const LS_SESSION = "fsc_session";    // current session { username, role, expiresAt }
 
+/* ข้อมูลใบรับรอง FSC ขององค์กร — เป็นค่าเดียวกันทุกล็อต (ไม่ได้ผูกกับล็อตใดล็อตหนึ่ง) ใช้แสดง
+   บนหัวเอกสาร "ใบสรุปการซื้อ" แก้ที่เดียวตรงนี้เมื่อต่ออายุ/เปลี่ยนใบรับรอง
+   ใบปัจจุบัน: ออก 2026-08-12 หมดอายุ 2031-08-11 */
+const FSC_CERT_INFO = {
+  productCode: "N7.1.1 Natural rubber",
+  certificateCode: "BV-FM/COC-229124",
+  status: "Valid",
+};
+
 /* ════════════ Sync status (Google Sheets last update) ════════════
    แสดงเวลาที่ดึงข้อมูลจาก Google Sheets ครั้งล่าสุด + เตือนถ้าเก่าเกินไป
    ตัวแปร window.MEMBERS_LAST_SYNC + MEMBERS_SOURCE_URL ถูกเขียนโดย
@@ -4960,6 +4969,7 @@ function renderLotDetail(params) {
     metaTb.append(
       el("tr", null, metaRow("เลขที่เอกสาร", lot.lotId), metaRow("วันที่รับซื้อ", lot.purchaseDate), metaRow("จุดรับซื้อ (HUB)", lot.hub)),
       el("tr", null, metaRow("รูปแบบผลิต", lot.productForm), metaRow("FSC Claim", lot.fscClaim), metaRow("เลขใบส่งของ", lot.transferDocNo)),
+      el("tr", null, metaRow("รหัสสินค้า", FSC_CERT_INFO.productCode), metaRow("Certificate Code", FSC_CERT_INFO.certificateCode), metaRow("สถานะ", FSC_CERT_INFO.status)),
     );
 
     // 1. ตรวจเช็ครถขนส่ง
