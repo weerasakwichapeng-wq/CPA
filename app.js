@@ -382,6 +382,25 @@ function migrateLotSources(sources) {
   });
   return groups;
 }
+
+/* ล้างแปลงที่ยังไม่เปิดกรีดออกจากล็อตที่บันทึกไว้ก่อนมีตัวกรองในช่องค้นหา (ดู isProductivePlot)
+   ตัดออกแค่ "ชื่อแปลง" ในกลุ่มเท่านั้น — ไม่แตะรอบชั่ง/น้ำหนัก/ยอดเงิน เพราะข้อมูลพวกนั้นผูกกับ
+   กลุ่ม FMU ไม่ได้ผูกรายแปลง ยอดรวมของล็อตจึงไม่เปลี่ยน
+   กันไว้ 2 ชั้น: ถ้าตัดแล้วกลุ่มจะไม่เหลือแปลงเลย จะไม่ตัด (ไม่งั้นน้ำหนักในกลุ่มนั้นจะกลายเป็น
+   ไม่มีที่มา ตรวจสอบย้อนกลับไม่ได้) และถ้าหาเรคอร์ดแปลงไม่เจอในชีท ก็ปล่อยไว้เหมือนเดิม */
+function dropNonProductivePlots(sources) {
+  if (!Array.isArray(sources)) return sources || [];
+  const recs = getAllRecords();
+  sources.forEach(g => {
+    if (!Array.isArray(g.plots) || g.plots.length === 0) return;
+    const kept = g.plots.filter(name => {
+      const rec = recs.find(r => r.plot === name);
+      return !rec || isProductivePlot(rec);   // ไม่รู้จัก = ไม่ตัด
+    });
+    if (kept.length && kept.length !== g.plots.length) g.plots = kept;
+  });
+  return sources;
+}
 // _lotsCache เก็บข้อมูลล็อตที่ sync มาจาก Firestore แบบ real-time (ดูส่วน
 // "Firebase live sync" ท้ายบล็อก storage) — เริ่มต้นด้วยสำเนา localStorage เดิม
 // (merge กับ bundled data/lots.js) เผื่อเปิดเว็บตอนไม่มีเน็ต แล้ว Firestore
@@ -393,7 +412,7 @@ function setLotsCache(arr) {
   // จะกระทบ _lotsCache ตรงๆ โดยไม่ผ่าน saveLots() เลย
   const all = arr.map(l => structuredClone(l));
   all.forEach(l => {
-    l.sources = migrateLotSources(l.sources);
+    l.sources = dropNonProductivePlots(migrateLotSources(l.sources));
     if (!l.receiptPhotos) l.receiptPhotos = l.receiptPhoto ? [l.receiptPhoto] : [];
     // ล็อตเก่าที่บันทึกไว้ก่อนมีช่องใบชั่งน้ำหนักรถที่โรงงาน — ให้เป็น array ว่างไว้ก่อน
     if (!l.factoryWeighPhotos) l.factoryWeighPhotos = [];
