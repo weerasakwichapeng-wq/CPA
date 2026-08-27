@@ -4979,7 +4979,7 @@ function renderLotDetail(params) {
     // 4. แปลงต้นทาง — โครงสร้างเดียวกับตารางบนจอ (rowspan ตาม FMU) แต่คอลัมน์กระชับกว่าสำหรับกระดาษ
     const srcTb = $("#lpsSourceTable tbody");
     srcTb.innerHTML = "";
-    let grandGrossWeightKg = 0, grandSackCount = 0;
+    let grandGrossWeightKg = 0, grandSackCount = 0, grandContainerWeightKg = 0;
     const weighingPhotos = [];
     lot.sources.forEach(g => {
       const annualQuota = getAnnualDryQuota(g.memberId, lot.purchaseDate);
@@ -5016,6 +5016,7 @@ function renderLotDetail(params) {
         sumDry += dry;
         grandGrossWeightKg += Number(w.weightKg) || 0;
         grandSackCount += Number(w.sackCount) || 0;
+        grandContainerWeightKg += Number(w.containerWeightKg) || 0;
         const tr = el("tr", { class: overQuota ? "lps-over-quota" : "" });
         if (wi === 0) tr.append(groupCell);
         tr.append(
@@ -5054,7 +5055,7 @@ function renderLotDetail(params) {
     srcTf.append(el("tr", { class: "lps-total-row" },
       el("td", null, "รวมทั้งหมด"),
       el("td", { class: "lps-num" }, fmtNum(grandSackCount, 0)),
-      el("td", null, ""),
+      el("td", { class: "lps-num" }, fmtNum(grandContainerWeightKg, 2)),
       el("td", { class: "lps-num" }, fmtNum(grandGrossWeightKg, 2)),
       el("td", { class: "lps-num" }, fmtNum(totals.totalWeightKg, 2)),
       el("td", null, ""),
