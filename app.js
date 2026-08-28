@@ -383,6 +383,48 @@ function migrateLotSources(sources) {
   return groups;
 }
 
+/* ── เกณฑ์ "แปลงให้ผลผลิต" ──
+   ต้องประกาศไว้เหนือ setLotsCache() ที่ท้ายบล็อกนี้ เพราะ setLotsCache รันทันทีตอนโหลดไฟล์
+   แล้วเรียก dropNonProductivePlots -> isProductivePlot ต่อ ถ้าย้าย _prodNameCache /
+   MIN_PRODUCTIVE_RAI (let/const) ลงไปอยู่ใต้จุดนั้น จะติด Temporal Dead Zone แล้ว throw
+   ReferenceError ตั้งแต่โหลด ทำให้เว็บขาวทั้งหน้า (ตัว function เองถูก hoist แต่ let/const ไม่ถูก) */
+
+/* ชุดชื่อแปลงที่มี polygon "พื้นที่ให้ผลผลิต" บนแผนที่
+   polygon บางอันตั้งชื่อรวมหลายแปลงไว้ด้วยกัน เช่น "FMU1-1, FMU2-3" (แปลงที่ใช้ขอบเขตร่วมกัน)
+   จึงต้องแตกจุลภาคก่อนเสมอ — ถ้าเทียบชื่อตรงตัวจะพลาดไป 12 แปลงที่ใช้ polygon ร่วมกัน
+   แล้วเข้าใจผิดว่าเป็นแปลงไม่ให้ผลผลิต (จุดอื่นที่ค้นหา LANDTITLES ก็แตกจุลภาคแบบเดียวกัน) */
+let _prodNameCache = { src: null, set: null };
+function productivePlotNameSet() {
+  if (_prodNameCache.src === PRODUCTIVE) return _prodNameCache.set;
+  const set = new Set();
+  (PRODUCTIVE || []).forEach(p => String(p.name || "").split(",").forEach(n => {
+    const t = n.trim();
+    if (t) set.add(t);
+  }));
+  _prodNameCache = { src: PRODUCTIVE, set };
+  return set;
+}
+
+/* พื้นที่เปิดกรีดขั้นต่ำที่ถือว่า "มีผลผลิตให้รับซื้อจริง" (ไร่)
+   แปลงที่ไม่มี polygon ให้ผลผลิต จะมี tappingArea เหลือแค่ 0 - 0.52 ไร่ (เศษที่ปัดจากชีท)
+   ส่วนแปลงจริงที่แค่ยังไม่มี polygon ในแผนที่ (FMU74) มีถึง 11.67 ไร่ — 1 ไร่จึงแยกสองกลุ่มนี้
+   ออกจากกันได้ชัดเจน โดยไม่บล็อกแปลงที่ขายได้จริง */
+const MIN_PRODUCTIVE_RAI = 1;
+
+/* แปลงที่ "ให้ผลผลิต" — เลือกเข้าล็อตได้
+   1) มี polygon พื้นที่ให้ผลผลิตบนแผนที่ → ให้ผลผลิตแน่นอน (บนแผนที่จะเป็นสีเขียว)
+   2) ไม่มี polygon แต่มีพื้นที่เปิดกรีด >= 1 ไร่ → ยังนับว่าให้ผลผลิต ถือว่าแค่ขาดข้อมูลแผนที่
+      (ไม่ตัดทิ้ง เพราะจะบล็อกแปลงที่รับซื้อได้จริงอย่าง FMU74 11.67 ไร่ อายุยาง 25 ปี)
+   ที่เหลือ = ไม่ให้ผลผลิต เช่น ยางยังไม่เปิดกรีด (tappingArea เป็น "-") หรือแปลงที่พื้นที่
+   ให้ผลผลิตถูกหักจนหมดแล้ว (FMU2-4, FMU4-2, FMU6-1, FMU9-5 — ตรงกับผลคำนวณ productive area
+   ที่หักพื้นที่ non-productive ออกแล้วเหลือ 0 ไร่) บนแผนที่จะเห็นเป็นสีเหลือง (เอกสารสิทธิ์)
+   เช็ค rec.plot ด้วย เพราะมีบางเรคอร์ดไม่มีชื่อแปลงเลย — เลือกเข้าล็อตไปก็อ้างอิงกลับไม่ได้ */
+function isProductivePlot(rec) {
+  if (!rec || !rec.plot) return false;
+  if (productivePlotNameSet().has(rec.plot)) return true;
+  return Number(rec.tappingArea) >= MIN_PRODUCTIVE_RAI;
+}
+
 /* ล้างแปลงที่ยังไม่เปิดกรีดออกจากล็อตที่บันทึกไว้ก่อนมีตัวกรองในช่องค้นหา (ดู isProductivePlot)
    ตัดออกแค่ "ชื่อแปลง" ในกลุ่มเท่านั้น — ไม่แตะรอบชั่ง/น้ำหนัก/ยอดเงิน เพราะข้อมูลพวกนั้นผูกกับ
    กลุ่ม FMU ไม่ได้ผูกรายแปลง ยอดรวมของล็อตจึงไม่เปลี่ยน
@@ -813,42 +855,6 @@ function setQuotaFor(rec, q) {
   if (q && Object.values(q).some(v => v !== "" && v != null)) store[key] = { ...q, _updatedAt: Date.now() };
   else delete store[key];
   saveQuotas(store);
-}
-
-/* ชุดชื่อแปลงที่มี polygon "พื้นที่ให้ผลผลิต" บนแผนที่
-   polygon บางอันตั้งชื่อรวมหลายแปลงไว้ด้วยกัน เช่น "FMU1-1, FMU2-3" (แปลงที่ใช้ขอบเขตร่วมกัน)
-   จึงต้องแตกจุลภาคก่อนเสมอ — ถ้าเทียบชื่อตรงตัวจะพลาดไป 12 แปลงที่ใช้ polygon ร่วมกัน
-   แล้วเข้าใจผิดว่าเป็นแปลงไม่ให้ผลผลิต (จุดอื่นที่ค้นหา LANDTITLES ก็แตกจุลภาคแบบเดียวกัน) */
-let _prodNameCache = { src: null, set: null };
-function productivePlotNameSet() {
-  if (_prodNameCache.src === PRODUCTIVE) return _prodNameCache.set;
-  const set = new Set();
-  (PRODUCTIVE || []).forEach(p => String(p.name || "").split(",").forEach(n => {
-    const t = n.trim();
-    if (t) set.add(t);
-  }));
-  _prodNameCache = { src: PRODUCTIVE, set };
-  return set;
-}
-
-/* พื้นที่เปิดกรีดขั้นต่ำที่ถือว่า "มีผลผลิตให้รับซื้อจริง" (ไร่)
-   แปลงที่ไม่มี polygon ให้ผลผลิต จะมี tappingArea เหลือแค่ 0 - 0.52 ไร่ (เศษที่ปัดจากชีท)
-   ส่วนแปลงจริงที่แค่ยังไม่มี polygon ในแผนที่ (FMU74) มีถึง 11.67 ไร่ — 1 ไร่จึงแยกสองกลุ่มนี้
-   ออกจากกันได้ชัดเจน โดยไม่บล็อกแปลงที่ขายได้จริง */
-const MIN_PRODUCTIVE_RAI = 1;
-
-/* แปลงที่ "ให้ผลผลิต" — เลือกเข้าล็อตได้
-   1) มี polygon พื้นที่ให้ผลผลิตบนแผนที่ → ให้ผลผลิตแน่นอน (บนแผนที่จะเป็นสีเขียว)
-   2) ไม่มี polygon แต่มีพื้นที่เปิดกรีด >= 1 ไร่ → ยังนับว่าให้ผลผลิต ถือว่าแค่ขาดข้อมูลแผนที่
-      (ไม่ตัดทิ้ง เพราะจะบล็อกแปลงที่รับซื้อได้จริงอย่าง FMU74 11.67 ไร่ อายุยาง 25 ปี)
-   ที่เหลือ = ไม่ให้ผลผลิต เช่น ยางยังไม่เปิดกรีด (tappingArea เป็น "-") หรือแปลงที่พื้นที่
-   ให้ผลผลิตถูกหักจนหมดแล้ว (FMU2-4, FMU4-2, FMU6-1, FMU9-5 — ตรงกับผลคำนวณ productive area
-   ที่หักพื้นที่ non-productive ออกแล้วเหลือ 0 ไร่) บนแผนที่จะเห็นเป็นสีเหลือง (เอกสารสิทธิ์)
-   เช็ค rec.plot ด้วย เพราะมีบางเรคอร์ดไม่มีชื่อแปลงเลย — เลือกเข้าล็อตไปก็อ้างอิงกลับไม่ได้ */
-function isProductivePlot(rec) {
-  if (!rec || !rec.plot) return false;
-  if (productivePlotNameSet().has(rec.plot)) return true;
-  return Number(rec.tappingArea) >= MIN_PRODUCTIVE_RAI;
 }
 
 /* โควต้ารวมทั้งปี / คงเหลือ (น้ำหนักแห้ง) ของเกษตรกรรายหนึ่ง
