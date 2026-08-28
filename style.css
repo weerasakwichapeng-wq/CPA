@@ -3533,6 +3533,19 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 
 .src-table td[rowspan] { vertical-align: top; background: #f7faf7; min-width: 180px; }
 .src-group-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+
+/* ชิปชื่อแปลงในกลุ่ม FMU — แต่ละแปลงเอาออกได้เองด้วยปุ่ม ✕ ไม่ต้องลบทั้งกลุ่ม */
+.src-plot-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.src-plot-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--gray-100, #f1f3f5); border: 1px solid var(--gray-300, #dee2e6);
+  border-radius: 10px; padding: 1px 4px 1px 8px; font-size: 12px; color: var(--gray-700, #495057);
+}
+.src-plot-chip-x {
+  border: none; background: transparent; cursor: pointer; line-height: 1;
+  padding: 2px 4px; border-radius: 8px; color: var(--gray-500, #adb5bd); font-size: 12px;
+}
+.src-plot-chip-x:hover { background: #ffe3e3; color: #c92a2a; }
 .lot-photo-cell .lot-photo-thumb-cap { display: none; }
 
 /* Overlay ดูรูปเต็มจอ — ใช้แทน window.open()/target=_blank เพราะรูปที่ยังอัพโหลด

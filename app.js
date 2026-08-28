@@ -815,14 +815,40 @@ function setQuotaFor(rec, q) {
   saveQuotas(store);
 }
 
-/* แปลงที่ "ให้ผลผลิต" = มีพื้นที่เปิดกรีดจริง (tappingArea > 0)
-   แปลงที่ยางยังไม่โตพอจะกรีด ชีทต้นทางจะกรอก tappingArea เป็น "-" ไว้ (ปัจจุบันมี 3 แปลง
-   อายุยาง 3-5 ปี) แปลงพวกนี้ยังไม่มีผลผลิตให้รับซื้อ จึงไม่ควรให้เลือกเข้าล็อตได้
-   ใช้ tappingArea เป็นเกณฑ์ ไม่ใช้ productiveArea/fscArea เพราะสองฟิลด์นั้นเป็น 0 ผิดพลาด
-   อยู่หลายแปลงในไฟล์ต้นทาง (จุดอื่นในระบบก็เลี่ยงไปใช้ tappingArea ด้วยเหตุผลเดียวกัน)
-   เช็ค rec.plot ด้วย เพราะมีบางเรคอร์ดที่ไม่มีชื่อแปลงเลย — เลือกเข้าล็อตไปก็อ้างอิงกลับไม่ได้ */
+/* ชุดชื่อแปลงที่มี polygon "พื้นที่ให้ผลผลิต" บนแผนที่
+   polygon บางอันตั้งชื่อรวมหลายแปลงไว้ด้วยกัน เช่น "FMU1-1, FMU2-3" (แปลงที่ใช้ขอบเขตร่วมกัน)
+   จึงต้องแตกจุลภาคก่อนเสมอ — ถ้าเทียบชื่อตรงตัวจะพลาดไป 12 แปลงที่ใช้ polygon ร่วมกัน
+   แล้วเข้าใจผิดว่าเป็นแปลงไม่ให้ผลผลิต (จุดอื่นที่ค้นหา LANDTITLES ก็แตกจุลภาคแบบเดียวกัน) */
+let _prodNameCache = { src: null, set: null };
+function productivePlotNameSet() {
+  if (_prodNameCache.src === PRODUCTIVE) return _prodNameCache.set;
+  const set = new Set();
+  (PRODUCTIVE || []).forEach(p => String(p.name || "").split(",").forEach(n => {
+    const t = n.trim();
+    if (t) set.add(t);
+  }));
+  _prodNameCache = { src: PRODUCTIVE, set };
+  return set;
+}
+
+/* พื้นที่เปิดกรีดขั้นต่ำที่ถือว่า "มีผลผลิตให้รับซื้อจริง" (ไร่)
+   แปลงที่ไม่มี polygon ให้ผลผลิต จะมี tappingArea เหลือแค่ 0 - 0.52 ไร่ (เศษที่ปัดจากชีท)
+   ส่วนแปลงจริงที่แค่ยังไม่มี polygon ในแผนที่ (FMU74) มีถึง 11.67 ไร่ — 1 ไร่จึงแยกสองกลุ่มนี้
+   ออกจากกันได้ชัดเจน โดยไม่บล็อกแปลงที่ขายได้จริง */
+const MIN_PRODUCTIVE_RAI = 1;
+
+/* แปลงที่ "ให้ผลผลิต" — เลือกเข้าล็อตได้
+   1) มี polygon พื้นที่ให้ผลผลิตบนแผนที่ → ให้ผลผลิตแน่นอน (บนแผนที่จะเป็นสีเขียว)
+   2) ไม่มี polygon แต่มีพื้นที่เปิดกรีด >= 1 ไร่ → ยังนับว่าให้ผลผลิต ถือว่าแค่ขาดข้อมูลแผนที่
+      (ไม่ตัดทิ้ง เพราะจะบล็อกแปลงที่รับซื้อได้จริงอย่าง FMU74 11.67 ไร่ อายุยาง 25 ปี)
+   ที่เหลือ = ไม่ให้ผลผลิต เช่น ยางยังไม่เปิดกรีด (tappingArea เป็น "-") หรือแปลงที่พื้นที่
+   ให้ผลผลิตถูกหักจนหมดแล้ว (FMU2-4, FMU4-2, FMU6-1, FMU9-5 — ตรงกับผลคำนวณ productive area
+   ที่หักพื้นที่ non-productive ออกแล้วเหลือ 0 ไร่) บนแผนที่จะเห็นเป็นสีเหลือง (เอกสารสิทธิ์)
+   เช็ค rec.plot ด้วย เพราะมีบางเรคอร์ดไม่มีชื่อแปลงเลย — เลือกเข้าล็อตไปก็อ้างอิงกลับไม่ได้ */
 function isProductivePlot(rec) {
-  return !!rec && !!rec.plot && Number(rec.tappingArea) > 0;
+  if (!rec || !rec.plot) return false;
+  if (productivePlotNameSet().has(rec.plot)) return true;
+  return Number(rec.tappingArea) >= MIN_PRODUCTIVE_RAI;
 }
 
 /* โควต้ารวมทั้งปี / คงเหลือ (น้ำหนักแห้ง) ของเกษตรกรรายหนึ่ง
@@ -4506,9 +4532,31 @@ function renderLotForm(params) {
     tbody.innerHTML = "";
 
     sources.forEach((g, gi) => {
+      // แต่ละแปลงมีปุ่ม ✕ ของตัวเอง — เดิมเป็นข้อความรวมบรรทัดเดียว ถ้าเผลอเพิ่มแปลงผิดมา
+      // ต้องลบทั้ง FMU ทิ้งแล้วกรอกรอบชั่งใหม่หมด ทั้งที่ตั้งใจจะเอาออกแค่แปลงเดียว
+      const plotChips = el("div", { class: "src-plot-chips" },
+        ...(g.plots || []).map(plotName => el("span", { class: "src-plot-chip" },
+          plotName,
+          el("button", {
+            type: "button", class: "src-plot-chip-x",
+            title: `เอา ${plotName} ออกจากกลุ่มนี้`,
+            onclick: () => {
+              // กันไม่ให้กลุ่มเหลือศูนย์แปลง — น้ำหนัก/ยอดเงินผูกอยู่กับกลุ่ม ถ้าไม่เหลือแปลงเลย
+              // จะกลายเป็นน้ำหนักที่ไม่มีที่มา ตรวจสอบย้อนกลับไม่ได้
+              if ((g.plots || []).length <= 1) {
+                alert("⚠️ กลุ่มนี้เหลือแปลงเดียว เอาออกไม่ได้\nถ้าต้องการลบทั้งกลุ่มพร้อมรอบชั่ง ให้กดปุ่ม \"🗑️ ลบทั้ง FMU\"");
+                return;
+              }
+              g.plots = g.plots.filter(p => p !== plotName);
+              renderSources();
+              recalcFooter();
+            },
+          }, "✕"),
+        )),
+      );
       const groupCell = el("td", { rowspan: Math.max(g.weighings.length, 1) },
         el("b", null, safe(g.fmu)), el("br"),
-        el("span", { class: "muted" }, (g.plots || []).join(", ")), el("br"),
+        plotChips,
         el("span", null, safe(g.nameTh)), el("br"),
         el("div", { class: "src-group-actions" },
           el("button", {
