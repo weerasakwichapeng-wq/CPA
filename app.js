@@ -857,15 +857,33 @@ function setQuotaFor(rec, q) {
   saveQuotas(store);
 }
 
-/* โควต้ารวมทั้งปี / คงเหลือ (น้ำหนักแห้ง) ของเกษตรกรรายหนึ่ง
-   โควต้ารวมทั้งปี = yieldPerRai (น้ำหนักแห้ง กก./ไร่/ปี จากชีทต้นทาง) × พื้นที่ให้ผลผลิตรวม
-   (tappingArea รวมทุกแปลงของเกษตรกรคนนี้ — ไม่ใช้ productiveArea/fscArea เพราะฟิลด์นั้นมักเป็น 0
-   ผิดพลาดในไฟล์ต้นทาง เหมือนที่ใช้คำนวณ KPI "พื้นที่ FSC รวม" ของหน้ารายละเอียดล็อต)
-   แล้วหักด้วยยอดน้ำหนักแห้งที่ส่งมาแล้วทุกล็อตในปีเดียวกัน (เทียบจาก purchaseDate) รวมล็อตปัจจุบันด้วย */
+/* เดือนที่ "ไม่เปิดกรีด" (ช่วงต้นยางผลัดใบ) — เลขเดือนแบบ JS 0=ม.ค. ... 11=ธ.ค.
+   ที่นี่ปิดกรีด ก.พ.–มี.ค. เหลือกรีดจริง 10 เดือน (เม.ย.–ม.ค.)
+   สอดคล้องกับชีทต้นทางที่ตั้ง deliveryPerRound = ผลผลิตทั้งปี ÷ 10 พอดีทุกแปลง */
+const NON_TAPPING_MONTHS = [1, 2];
+const TAPPING_MONTHS_PER_YEAR = 12 - NON_TAPPING_MONTHS.length;   // 10
+
+/* จำนวนเดือนที่เปิดกรีดไปแล้วในปีปฏิทินนี้ นับตั้งแต่ ม.ค. ถึงเดือนของวันที่อ้างอิง (นับรวมเดือนนั้น)
+   เช่น ส.ค. -> ม.ค.,เม.ย.,พ.ค.,มิ.ย.,ก.ค.,ส.ค. = 6 เดือน (ข้าม ก.พ./มี.ค. ที่ปิดกรีด) */
+function tappingMonthsElapsed(date) {
+  let n = 0;
+  for (let m = 0; m <= date.getMonth(); m++) if (!NON_TAPPING_MONTHS.includes(m)) n++;
+  return n;
+}
+
+/* โควต้ายางแห้งของเกษตรกรรายหนึ่ง ณ วันที่อ้างอิงหนึ่งๆ
+   - annualQuotaKg = yieldPerRai (น้ำหนักแห้ง กก./ไร่/ปี จากชีทต้นทาง) × พื้นที่เปิดกรีดรวมทุกแปลง
+     (ใช้ tappingArea ไม่ใช้ productiveArea/fscArea เพราะสองฟิลด์นั้นเป็น 0 ผิดพลาดหลายแปลง)
+   - deliveredDryKg = ยอดน้ำหนักแห้งที่ส่งแล้วในปีปฏิทินเดียวกัน โดยนับเฉพาะล็อตที่ซื้อ "ไม่เกิน"
+     วันที่อ้างอิง — สำคัญกับเอกสารที่พิมพ์ออกไปแล้ว ถ้านับทั้งปีแบบเดิม พอมีล็อตใหม่เข้ามาทีหลัง
+     แล้วพิมพ์รายงานล็อตเก่าซ้ำ ตัวเลข "คงเหลือ" จะเปลี่ยนไปจากใบเดิม ตรวจสอบย้อนกลับไม่ได้
+   - proRatedQuotaKg = โควต้าตามสัดส่วนเดือนที่เปิดกรีดไปแล้ว ใช้เตือนตั้งแต่ระหว่างปี ไม่ต้องรอ
+     ให้ทะลุเพดานทั้งปีก่อน (ส่งครบโควต้าทั้งปีตั้งแต่กลางปี = ผิดปกติ ควรเตือนได้ทันที) */
 function getAnnualDryQuota(memberId, referenceDateStr) {
   if (!memberId) return null;
-  const refYear = new Date(referenceDateStr || Date.now()).getFullYear();
-  if (isNaN(refYear)) return null;
+  const ref = new Date(referenceDateStr || Date.now());
+  if (isNaN(ref.getTime())) return null;
+  const refYear = ref.getFullYear();
   const memberRecs = getAllRecords().filter(x => x.memberId === memberId);
   if (!memberRecs.length) return null;
   const yieldPerRai = Number(getQuotaFor(memberRecs[0]).yieldPerRai) || 0;
@@ -873,14 +891,25 @@ function getAnnualDryQuota(memberId, referenceDateStr) {
   const annualQuotaKg = yieldPerRai * productiveAreaRai;
   let deliveredDryKg = 0;
   loadLots().forEach(l => {
-    if (!l.purchaseDate || new Date(l.purchaseDate).getFullYear() !== refYear) return;
+    if (!l.purchaseDate) return;
+    const d = new Date(l.purchaseDate);
+    if (isNaN(d.getTime()) || d.getFullYear() !== refYear || d > ref) return;
     const drc = Number(l.drcPercent) || 0;
     (l.sources || []).forEach(g => {
       if (g.memberId !== memberId) return;
       (g.weighings || []).forEach(w => { deliveredDryKg += netWeightKg(w) * (drc / 100); });
     });
   });
-  return { annualQuotaKg, deliveredDryKg, remainingDryKg: annualQuotaKg - deliveredDryKg };
+  const monthsElapsed = tappingMonthsElapsed(ref);
+  return {
+    annualQuotaKg,
+    deliveredDryKg,
+    remainingDryKg: annualQuotaKg - deliveredDryKg,
+    proRatedQuotaKg: annualQuotaKg * monthsElapsed / TAPPING_MONTHS_PER_YEAR,
+    monthsElapsed,
+    // ซื้อยางในเดือนที่ต้นยางผลัดใบ ไม่ควรมีน้ำยางออก — เป็นสัญญาณเสี่ยงว่ามียางนอกระบบปน
+    inNonTappingMonth: NON_TAPPING_MONTHS.includes(ref.getMonth()),
+  };
 }
 
 /* ============ Utilities ============ */
@@ -5116,7 +5145,11 @@ function renderLotDetail(params) {
     lot.sources.forEach(g => {
       const annualQuota = getAnnualDryQuota(g.memberId, lot.purchaseDate);
       const hasQuotaData = !!annualQuota && annualQuota.annualQuotaKg > 0;
-      const overQuota = hasQuotaData && annualQuota.remainingDryKg < 0;
+      // เตือน 2 กรณี: ส่งเกินเพดานทั้งปี หรือส่งเกินสัดส่วนเดือนที่เปิดกรีดไปแล้ว
+      // (อย่างหลังจับได้ตั้งแต่ระหว่างปี ไม่ต้องรอให้ทะลุยอดทั้งปีก่อน)
+      const overAnnual = hasQuotaData && annualQuota.remainingDryKg < 0;
+      const overPace = hasQuotaData && annualQuota.deliveredDryKg > annualQuota.proRatedQuotaKg;
+      const overQuota = overAnnual || overPace;
       const weighings = g.weighings && g.weighings.length ? g.weighings : [];
       const showSubtotal = weighings.length > 1;
       // rowspan ครอบเฉพาะแถวรอบชั่งจริง ไม่รวมแถว "รวม" — เพื่อให้แถว "รวม" มีคอลัมน์ 1
@@ -5127,9 +5160,17 @@ function renderLotDetail(params) {
         el("b", null, safe(g.fmu)), ` (${(g.plots || []).join(", ")})`, el("br"),
         safe(g.nameTh), memberIdMatch ? el("span", { class: "lps-member-id" }, ` (${memberIdMatch[0]})`) : "",
       );
+      // บรรทัดแรก = โควต้าทั้งปี / คงเหลือ, บรรทัดสอง = สัดส่วนตามเดือนที่เปิดกรีดไปแล้ว
+      // ใส่ตัวหารไว้ให้เห็น (n/10 เดือน) เพื่อให้ตรวจสอบที่มาของตัวเลขได้เองโดยไม่ต้องเปิดโค้ด
       const quotaCell = el("td", { rowspan, class: overQuota ? "lps-quota-bad" : "" },
         hasQuotaData
-          ? `${fmtNum(annualQuota.annualQuotaKg, 2)} / ${fmtNum(annualQuota.remainingDryKg, 2)}${overQuota ? " ⚠️" : ""}`
+          ? el("span", null,
+              `${fmtNum(annualQuota.annualQuotaKg, 2)} / ${fmtNum(annualQuota.remainingDryKg, 2)}${overQuota ? " ⚠️" : ""}`,
+              el("br"),
+              el("span", { class: "lps-quota-sub" },
+                `ตามสัดส่วน ${annualQuota.monthsElapsed}/${TAPPING_MONTHS_PER_YEAR} เดือน: ${fmtNum(annualQuota.proRatedQuotaKg, 2)}`,
+                annualQuota.inNonTappingMonth ? " · ซื้อช่วงปิดกรีด" : ""),
+            )
           : "-");
       if (!weighings.length) {
         srcTb.append(el("tr", null, groupCell, el("td", { colspan: 8 }, "ไม่มีรอบชั่ง"), quotaCell));
