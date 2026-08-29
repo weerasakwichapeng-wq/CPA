@@ -4603,10 +4603,24 @@ function renderLotForm(params) {
           }, "✕"),
         )),
       );
+      // โควต้า/รอบ ของกลุ่มนี้ = ผลรวมของทุกแปลงที่เลือกอยู่ (แต่ละแปลงมีโควต้าของตัวเอง ห้ามใช้
+      // ของแปลงใดแปลงหนึ่งแทนทั้งกลุ่ม) แสดงไว้ตรงนี้เพื่อให้เทียบกับน้ำหนักที่กำลังกรอกได้ทันที
+      // ตัวเลขอัพเดทเองเมื่อเพิ่ม/ลบแปลง เพราะ renderSources() ถูกเรียกใหม่ทุกครั้ง
+      let groupQuotaPerRound = 0, hasGroupQuota = false;
+      (g.plots || []).forEach(plotName => {
+        const pr = allRecs.find(x => x.plot === plotName);
+        if (!pr) return;
+        const dq = Number(getQuotaFor(pr).deliveryPerRound) || 0;
+        if (dq > 0) { groupQuotaPerRound += dq; hasGroupQuota = true; }
+      });
       const groupCell = el("td", { rowspan: Math.max(g.weighings.length, 1) },
         el("b", null, safe(g.fmu)), el("br"),
         plotChips,
         el("span", null, safe(g.nameTh)), el("br"),
+        el("span", { class: "src-group-quota" },
+          hasGroupQuota
+            ? `โควต้า/รอบ: ${fmtNum(groupQuotaPerRound, 2)} กก. (${(g.plots || []).length} แปลง)`
+            : "โควต้า/รอบ: ไม่มีข้อมูล"),
         el("div", { class: "src-group-actions" },
           el("button", {
             type: "button", class: "btn btn-small btn-primary",

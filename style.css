@@ -3537,6 +3537,9 @@ fieldset textarea { font-family: "Courier New", monospace; resize: vertical; }
 .src-table td[rowspan] { vertical-align: top; background: #f7faf7; min-width: 180px; }
 .src-group-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 
+/* โควต้า/รอบ รวมของกลุ่ม FMU — ให้เทียบกับน้ำหนักที่กำลังกรอกในแถวเดียวกันได้ทันที */
+.src-group-quota { display: block; margin-top: 4px; font-size: 12px; color: var(--gray-600, #868e96); }
+
 /* ชิปชื่อแปลงในกลุ่ม FMU — แต่ละแปลงเอาออกได้เองด้วยปุ่ม ✕ ไม่ต้องลบทั้งกลุ่ม */
 .src-plot-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
 .src-plot-chip {
