@@ -4298,12 +4298,26 @@ function calcLotTotals(lot) {
 }
 
 /* เช็คว่าล็อตแนบเอกสารครบหรือยัง — ใบรับรอง FSC ของรถ + ใบเสร็จรับเงิน + รูปใบปิดรถ (POP)
-   (ไม่เช็คข้อมูลอื่น เช่น เลขใบส่งของ/DRC/รูปตาชั่ง-ยาง ตามที่ตกลงไว้) */
+   + ใบชั่งน้ำหนักรถที่โรงงาน
+   (ไม่เช็คข้อมูลอื่น เช่น เลขใบส่งของ/DRC/รูปตาชั่ง-ยาง ตามที่ตกลงไว้)
+   หมายเหตุ: ใบชั่งน้ำหนักรถที่โรงงานเพิ่งเพิ่มเข้ามาทีหลัง ล็อตที่บันทึกไว้ก่อนหน้านั้นจึงขึ้นเป็น
+   "ไม่ครบ" จนกว่าจะเข้าไปแนบเพิ่ม — เป็นผลที่ตั้งใจ ไม่ใช่ข้อมูลหาย */
 function lotDocsComplete(lot) {
   const hasCert = !!(lot.truck && lot.truck.fscCertFile);
   const hasReceipt = !!(lot.receiptPhotos && lot.receiptPhotos.length);
   const hasClosurePhoto = !!(lot.closure && lot.closure.photo);
-  return hasCert && hasReceipt && hasClosurePhoto;
+  const hasFactoryWeigh = !!(lot.factoryWeighPhotos && lot.factoryWeighPhotos.length);
+  return hasCert && hasReceipt && hasClosurePhoto && hasFactoryWeigh;
+}
+
+/* รายชื่อเอกสารที่ยังขาด — ใช้เป็น tooltip ให้รู้ว่าต้องไปแนบอะไรเพิ่ม ไม่ต้องเปิดล็อตไล่ดูเอง */
+function lotMissingDocs(lot) {
+  const missing = [];
+  if (!(lot.truck && lot.truck.fscCertFile)) missing.push("ใบรับรอง FSC");
+  if (!(lot.closure && lot.closure.photo)) missing.push("ใบปิดรถ");
+  if (!(lot.factoryWeighPhotos && lot.factoryWeighPhotos.length)) missing.push("ใบชั่งน้ำหนักรถที่โรงงาน");
+  if (!(lot.receiptPhotos && lot.receiptPhotos.length)) missing.push("ใบเสร็จรับเงิน");
+  return missing;
 }
 
 /* ── Lots list ── */
@@ -4397,8 +4411,8 @@ function renderLots() {
         el("td", null, l.drcPercent != null && l.drcPercent !== "" ? fmtNum(l.drcPercent, 1) + "%" : "-"),
         el("td", null, `${t.plotCount} แปลง`),
         el("td", { style: "text-align:center" }, lotDocsComplete(l)
-          ? el("span", { class: "tr-badge tr-badge-green", title: "แนบเอกสารครบ (ใบรับรอง FSC / ใบเสร็จ / ใบปิดรถ)" }, "✅ ครบ")
-          : el("span", { class: "tr-badge tr-badge-red", title: "ยังแนบเอกสารไม่ครบ (ใบรับรอง FSC / ใบเสร็จ / ใบปิดรถ)" }, "⚠️ ไม่ครบ")),
+          ? el("span", { class: "tr-badge tr-badge-green", title: "แนบเอกสารครบ (ใบรับรอง FSC / ใบปิดรถ / ใบชั่งน้ำหนักรถที่โรงงาน / ใบเสร็จรับเงิน)" }, "✅ ครบ")
+          : el("span", { class: "tr-badge tr-badge-red", title: "ยังขาด: " + lotMissingDocs(l).join(", ") }, "⚠️ ไม่ครบ")),
         el("td", null, el("span", { class: "tr-badge " + (l.status === "Open" ? "tr-badge-green" : l.status === "Shipped" ? "tr-badge-gray" : "tr-badge-red") }, safe(l.status))),
         el("td", null, "▸"),
       );
