@@ -1675,10 +1675,17 @@ function renderDashboard() {
   renderDocBySubdistrict("#docPerSubdistrictChart", docBySubdistrict);
 
   // ── พื้นที่ลักษณะต่างๆ (sum of rai) ──
+  // กราฟนี้แสดง "สัดส่วนองค์ประกอบ" ของพื้นที่แปลงทั้งหมด แต่ละแท่งจึงต้องไม่ทับกันเอง
+  // เดิมใส่ 2 แท่งที่ทับกับแท่งอื่น ทำให้ผลรวมพองเป็น 8,307 ไร่ ทั้งที่พื้นที่จริงมี 2,986.68 ไร่ (278%):
+  //   - "พื้นที่ให้ผลผลิต" ใช้ productiveRai ซึ่งมีค่าเท่ากับ areaRai (พื้นที่แปลงทั้งหมด) ทุกแปลง
+  //     คือเป็น "ยอดรวม" ไม่ใช่องค์ประกอบหนึ่ง จึงครอบทุกแท่งที่เหลืออยู่แล้ว
+  //   - "พื้นที่ทำไม้" (woodArea) เป็นต้นยางชุดเดียวกับพื้นที่เปิดกรีด (เท่ากันเป๊ะ 181/184 แปลง)
+  //     เป็นการมองพื้นที่เดิมในแง่เนื้อไม้ ไม่ใช่พื้นที่คนละผืน
+  // องค์ประกอบที่ไม่ทับกันจริงคือ เปิดกรีด + ยังไม่เปิดกรีด + พื้นที่ไม่ให้ผลผลิต 6 ประเภท
+  // (ตรวจแล้ว: 2,333.64 + 642.20 ≈ 2,986.68 = พื้นที่แปลงจริง)
   const areaTypes = {
-    "พื้นที่ให้ผลผลิต": 0,
     "พื้นที่เปิดกรีด": 0,
-    "พื้นที่ทำไม้": 0,
+    "ยางยังไม่เปิดกรีด": 0,
     "ที่อยู่อาศัย": 0,
     "นาข้าว": 0,
     "แหล่งน้ำ": 0,
@@ -1687,9 +1694,11 @@ function renderDashboard() {
     "พื้นที่อนุรักษ์": 0,
   };
   all.forEach(m => {
-    areaTypes["พื้นที่ให้ผลผลิต"] += Number(m.productiveRai) || 0;
-    areaTypes["พื้นที่เปิดกรีด"] += Number(m.tappingArea) || 0;
-    areaTypes["พื้นที่ทำไม้"] += Number(m.woodArea) || 0;
+    const tapping = Number(m.tappingArea) || 0;
+    const nonProd = Number(m.totalNonProductive) || 0;
+    areaTypes["พื้นที่เปิดกรีด"] += tapping;
+    // ส่วนที่เหลือของแปลงหลังหักพื้นที่เปิดกรีดและพื้นที่ไม่ให้ผลผลิต = ยางที่ยังไม่ถึงวัยกรีด
+    areaTypes["ยางยังไม่เปิดกรีด"] += Math.max(0, (Number(m.areaRai) || 0) - tapping - nonProd);
     areaTypes["ที่อยู่อาศัย"] += Number(m.residenceArea) || 0;
     areaTypes["นาข้าว"] += Number(m.riceArea) || 0;
     areaTypes["แหล่งน้ำ"] += Number(m.waterArea) || 0;
@@ -1740,7 +1749,11 @@ function renderDashboard() {
   const totalLatex = all.reduce((s, m) => s + (Number(m.yieldLatexKgRai) || 0) * (Number(m.areaRai) || 0), 0);
   const dryRubberFromCupLump = totalCupLump * 0.65;  // DRC ~65%
   const totalDryRubber = dryRubberFromCupLump;
-  const totalProductiveRai = all.reduce((s, m) => s + (Number(m.productiveRai) || 0), 0);
+  // ต้องใช้ tappingArea (พท.เปิดกรีด) ไม่ใช่ productiveRai — ชื่อฟิลด์ productiveRai ชวนเข้าใจผิด
+  // เพราะจริงๆ มีค่าเท่ากับ areaRai (พื้นที่แปลงทั้งหมด รวมนาข้าว/บ่อน้ำ/ยางที่ยังไม่กรีด) ทุกแปลง
+  // ยืนยันได้จากชีทเอง: ยางก้อนถ้วย x 0.65 / tappingArea = yieldPerRai ที่ชีทกรอกไว้ตรงทุกแปลง
+  // (ถ้าหารด้วย productiveRai จะเพี้ยน เช่น FMU1-6 ได้ 5.5 แทนที่จะเป็น 210)
+  const totalProductiveRai = all.reduce((s, m) => s + (Number(m.tappingArea) || 0), 0);
   const avgYieldPerRai = totalProductiveRai ? totalDryRubber / totalProductiveRai : 0;
   const annualYieldEl = $("#annualYieldStats");
   if (annualYieldEl) {
