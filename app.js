@@ -1754,7 +1754,15 @@ function renderDashboard() {
   // ยืนยันได้จากชีทเอง: ยางก้อนถ้วย x 0.65 / tappingArea = yieldPerRai ที่ชีทกรอกไว้ตรงทุกแปลง
   // (ถ้าหารด้วย productiveRai จะเพี้ยน เช่น FMU1-6 ได้ 5.5 แทนที่จะเป็น 210)
   const totalProductiveRai = all.reduce((s, m) => s + (Number(m.tappingArea) || 0), 0);
-  const avgYieldPerRai = totalProductiveRai ? totalDryRubber / totalProductiveRai : 0;
+
+  // "ผลผลิตเฉลี่ย" ใช้สูตรเดียวกับแถว "รวมทั้งสิ้น" ของชีท Member Data = ผลรวม yieldPerRai ของทุกแถว
+  // หารด้วยจำนวนแถวทั้งหมด (ปัจจุบัน 57,721 / 184 = 313.70) เพื่อให้ตัวเลขบนเว็บตรงกับเอกสารที่ใช้
+  // อ้างอิงตอนตรวจ FSC — ถ้าคำนวณคนละแบบจะอธิบายผู้ตรวจไม่ได้ว่าทำไมสองที่ไม่ตรงกัน
+  // หมายเหตุ: ตัวหารคือ "ทุกแถว" ไม่ใช่ "แถวที่มีค่า" ปัจจุบันมี 8 แถวที่ยังไม่กรอก yieldPerRai
+  // จึงถูกนับเป็น 0 และดึงค่าเฉลี่ยลง (ถ้ากรอกครบจะได้ 327.96) — เป็นพฤติกรรมของชีท ไม่ใช่ของเว็บ
+  const avgYieldPerRai = all.length
+    ? all.reduce((s, m) => s + (Number(m.yieldPerRai) || 0), 0) / all.length
+    : 0;
   const annualYieldEl = $("#annualYieldStats");
   if (annualYieldEl) {
     annualYieldEl.innerHTML = "";
