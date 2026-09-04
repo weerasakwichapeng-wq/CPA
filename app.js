@@ -458,6 +458,9 @@ function setLotsCache(arr) {
     if (!l.receiptPhotos) l.receiptPhotos = l.receiptPhoto ? [l.receiptPhoto] : [];
     // ล็อตเก่าที่บันทึกไว้ก่อนมีช่องใบชั่งน้ำหนักรถที่โรงงาน — ให้เป็น array ว่างไว้ก่อน
     if (!l.factoryWeighPhotos) l.factoryWeighPhotos = [];
+    // รูปใบปิดรถ (POP) เดิมเป็นรูปเดียว (closure.photo) — ย้ายเป็น array (closure.photos)
+    // เพื่อรองรับแนบได้หลายรูป โดยไม่ทิ้งข้อมูลรูปเดิมที่เคยแนบไว้แล้ว
+    if (l.closure && !l.closure.photos) l.closure.photos = l.closure.photo ? [l.closure.photo] : [];
   });
   _lotsCache = all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
@@ -4326,7 +4329,7 @@ function calcLotTotals(lot) {
 function lotDocsComplete(lot) {
   const hasCert = !!(lot.truck && lot.truck.fscCertFile);
   const hasReceipt = !!(lot.receiptPhotos && lot.receiptPhotos.length);
-  const hasClosurePhoto = !!(lot.closure && lot.closure.photo);
+  const hasClosurePhoto = !!(lot.closure && lot.closure.photos && lot.closure.photos.length);
   const hasFactoryWeigh = !!(lot.factoryWeighPhotos && lot.factoryWeighPhotos.length);
   return hasCert && hasReceipt && hasClosurePhoto && hasFactoryWeigh;
 }
@@ -4335,7 +4338,7 @@ function lotDocsComplete(lot) {
 function lotMissingDocs(lot) {
   const missing = [];
   if (!(lot.truck && lot.truck.fscCertFile)) missing.push("ใบรับรอง FSC");
-  if (!(lot.closure && lot.closure.photo)) missing.push("ใบปิดรถ");
+  if (!(lot.closure && lot.closure.photos && lot.closure.photos.length)) missing.push("ใบปิดรถ");
   if (!(lot.factoryWeighPhotos && lot.factoryWeighPhotos.length)) missing.push("ใบชั่งน้ำหนักรถที่โรงงาน");
   if (!(lot.receiptPhotos && lot.receiptPhotos.length)) missing.push("ใบเสร็จรับเงิน");
   return missing;
@@ -5103,21 +5106,24 @@ function renderLotDetail(params) {
   function renderClosurePanel() {
     const panel = $("#lotClosurePanel");
     panel.innerHTML = "";
-    const closure = lot.closure || { closed: false, photo: null, closedAt: null };
+    const closure = lot.closure || { closed: false, photos: [], closedAt: null };
     if (closure.closed) {
       const kv = el("dl", { class: "kv" },
         el("dt", null, "สถานะ"), el("dd", null, el("span", { class: "tr-badge tr-badge-green" }, "🔒 ปิดรถแล้ว")),
         el("dt", null, "ปิดเมื่อ"), el("dd", null, closure.closedAt ? new Date(closure.closedAt).toLocaleString("th-TH") : "-"),
       );
-      panel.append(kv, renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
+      const photos = closure.photos && closure.photos.length ? closure.photos : [null];
+      const photoRow = el("div", { class: "lot-photo-row" });
+      photos.forEach((p, i) => photoRow.append(renderPhotoThumbLink(p, `ใบปิดรถ (POP)${photos.length > 1 ? " " + (i + 1) : ""}`)));
+      panel.append(kv, photoRow);
     } else {
-      let pendingPhoto = closure.photo || null;
-      const photoBtn = buildPhotoPickerButton("แนบรูปใบปิดรถ (POP)", () => pendingPhoto, photo => { pendingPhoto = photo; }, { dualMode: true, landscape: true });
+      const photosHolder = { closure: closure.photos ? [...closure.photos] : [] };
+      const photoWidget = buildAuditPhotoWidget("closure", photosHolder, "📷 แนบรูปใบปิดรถ (POP) — แนบได้หลายรูป", { landscape: true });
       const closeBtn = el("button", { type: "button", class: "btn btn-primary" }, "🔒 ยืนยันปิดรถ");
       closeBtn.onclick = () => {
-        if (!pendingPhoto) { alert("⚠️ กรุณาแนบรูปใบปิดรถจากระบบ POP ก่อนปิดรถ"); return; }
+        if (!photosHolder.closure.length) { alert("⚠️ กรุณาแนบรูปใบปิดรถจากระบบ POP ก่อนปิดรถ"); return; }
         if (!confirm("ยืนยันปิดรถ? หลังปิดแล้วจะแก้ไขแปลงต้นทางไม่ได้อีก")) return;
-        lot.closure = { closed: true, photo: pendingPhoto, closedAt: Date.now() };
+        lot.closure = { closed: true, photos: photosHolder.closure, closedAt: Date.now() };
         lot.status = "Closed";
         upsertLot(lot);
         renderClosurePanel();
@@ -5125,7 +5131,7 @@ function renderLotDetail(params) {
       };
       panel.append(
         el("p", { class: "muted" }, "เลือกข้อมูลเกษตรกรที่บันทึกในรถคันเดียวกัน (แปลงต้นทางด้านบน) ระบบคำนวณน้ำหนักรวมให้อัตโนมัติ — แนบรูปใบปิดรถจากระบบ POP (มีตราประทับ FSC) เพื่อใช้ตรวจสอบย้อนกลับ ก่อนกดยืนยันปิดรถ"),
-        photoBtn, closeBtn,
+        photoWidget, closeBtn,
       );
     }
   }
@@ -5170,7 +5176,10 @@ function renderLotDetail(params) {
     }
     const closurePhotoEl = $("#lpsClosurePhoto");
     closurePhotoEl.innerHTML = "";
-    closurePhotoEl.append(renderPhotoThumbLink(closure.photo, "ใบปิดรถ (POP)"));
+    const lpsClosurePhotos = closure.photos && closure.photos.length ? closure.photos : [null];
+    lpsClosurePhotos.forEach((p, i) => {
+      closurePhotoEl.append(renderPhotoThumbLink(p, `ใบปิดรถ (POP)${lpsClosurePhotos.length > 1 ? " " + (i + 1) : ""}`));
+    });
 
     // 3. ใบรับรอง FSC — แยกเป็นหัวข้อของตัวเอง ได้เต็มหน้ากระดาษ (ไม่ถูกจำกัดความสูงเหมือนตอนอยู่รวมกับหัวข้อ 1)
     // ถ้าไฟล์เป็น PDF จะเรนเดอร์หน้าแรกเป็นรูปแบบ async — #lotPrintBtn.onclick รอ certPdfReady ก่อนพิมพ์จริง
