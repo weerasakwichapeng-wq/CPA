@@ -4323,7 +4323,7 @@ function calcLotTotals(lot) {
 
 /* เช็คว่าล็อตแนบเอกสารครบหรือยัง — ใบรับรอง FSC ของรถ + ใบเสร็จรับเงิน + รูปใบปิดรถ (POP)
    + ใบชั่งน้ำหนักรถที่โรงงาน
-   (ไม่เช็คข้อมูลอื่น เช่น เลขล็อตผลิต/DRC/รูปตาชั่ง-ยาง ตามที่ตกลงไว้)
+   (ไม่เช็คข้อมูลอื่น เช่น ล็อตวัตถุดิบ/DRC/รูปตาชั่ง-ยาง ตามที่ตกลงไว้)
    หมายเหตุ: ใบชั่งน้ำหนักรถที่โรงงานเพิ่งเพิ่มเข้ามาทีหลัง ล็อตที่บันทึกไว้ก่อนหน้านั้นจึงขึ้นเป็น
    "ไม่ครบ" จนกว่าจะเข้าไปแนบเพิ่ม — เป็นผลที่ตั้งใจ ไม่ใช่ข้อมูลหาย */
 function lotDocsComplete(lot) {
@@ -5050,7 +5050,7 @@ function renderLotDetail(params) {
   // Detail KV
   const kv = $("#lotDetailKv");
   [
-    ["เลขล็อตผลิต", lot.transferDocNo],
+    ["ล็อตวัตถุดิบ", lot.transferDocNo],
     ["ผู้ซื้อ", lot.buyer],
     ["DRC %", lot.drcPercent + "%"],
     ["วันที่สร้าง", new Date(lot.createdAt).toLocaleString("th-TH")],
@@ -5149,7 +5149,7 @@ function renderLotDetail(params) {
     const metaRow = (label, value) => el("td", null, el("span", { class: "lps-docinfo-k" }, label), el("br"), el("b", null, safe(value)));
     metaTb.append(
       el("tr", null, metaRow("เลขที่เอกสาร", lot.lotId), metaRow("วันที่รับซื้อ", lot.purchaseDate), metaRow("จุดรับซื้อ (HUB)", lot.hub)),
-      el("tr", null, metaRow("รูปแบบผลิต", lot.productForm), metaRow("FSC Claim", lot.fscClaim), metaRow("เลขล็อตผลิต", lot.transferDocNo)),
+      el("tr", null, metaRow("รูปแบบผลิต", lot.productForm), metaRow("FSC Claim", lot.fscClaim), metaRow("ล็อตวัตถุดิบ", lot.transferDocNo)),
       el("tr", null, metaRow("รหัสสินค้า", FSC_CERT_INFO.productCode), metaRow("Certificate Code", FSC_CERT_INFO.certificateCode), metaRow("สถานะ", FSC_CERT_INFO.status)),
     );
 
