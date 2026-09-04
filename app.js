@@ -4349,7 +4349,7 @@ function renderLots() {
   const tbody = $("#lotsTable tbody");
   const search = $("#lotSearch");
   const filterMonth = $("#lotFilterMonth");
-  const filterStatus = $("#lotFilterStatus");
+  const filterMaterial = $("#lotFilterMaterial");
   const selectAllCb = $("#lotSelectAll");
   const kmlSelectedBtn = $("#lotKmlSelectedBtn");
   const selectedCountEl = $("#lotSelectedCount");
@@ -4366,10 +4366,20 @@ function renderLots() {
     const lots = loadLots();
     $("#lotCount").textContent = `${lots.length} ล็อต`;
 
-    // populate month filter
-    const months = [...new Set(lots.map(l => l.lotId && l.lotId.slice(4, 10)).filter(Boolean))].sort().reverse();
+    // populate month filter — YYYYMM อยู่หลัง prefix "CPA-FSC-" (8 ตัวอักษร) ไม่ใช่ตำแหน่ง 4
+    // เหมือนตอนยังใช้ prefix "LOT-" (สั้นกว่า) เดิม
+    const prevMonth = filterMonth.value;
+    const months = [...new Set(lots.map(l => l.lotId && l.lotId.slice(8, 14)).filter(Boolean))].sort().reverse();
     filterMonth.innerHTML = `<option value="">ทุกเดือน</option>`;
     months.forEach(m => filterMonth.append(el("option", { value: m }, `${m.slice(0, 4)}-${m.slice(4)}`)));
+    if (months.includes(prevMonth)) filterMonth.value = prevMonth;
+
+    // populate ล็อตวัตถุดิบ filter — ล็อตหลายใบอาจแชร์เลขล็อตวัตถุดิบเดียวกัน (ชั่งจากวัตถุดิบชุดเดียวกัน)
+    const prevMaterial = filterMaterial.value;
+    const materials = [...new Set(lots.map(l => (l.transferDocNo || "").trim()).filter(Boolean))].sort();
+    filterMaterial.innerHTML = `<option value="">ทุกล็อตวัตถุดิบ</option>`;
+    materials.forEach(m => filterMaterial.append(el("option", { value: m }, m)));
+    if (materials.includes(prevMaterial)) filterMaterial.value = prevMaterial;
 
     // KPI tiles
     const totalWeight = lots.reduce((s, l) => s + calcLotTotals(l).totalWeightKg, 0);
@@ -4398,13 +4408,13 @@ function renderLots() {
     // table rows
     const q = (search.value || "").trim().toLowerCase();
     const fM = filterMonth.value;
-    const fS = filterStatus.value;
+    const fMat = filterMaterial.value;
     tbody.innerHTML = "";
     let shown = 0;
     visibleLotIds = [];
     lots.forEach(l => {
       if (fM && !(l.lotId || "").includes(`-${fM}-`)) return;
-      if (fS && l.status !== fS) return;
+      if (fMat && (l.transferDocNo || "").trim() !== fMat) return;
       if (q) {
         const blob = [l.lotId, l.hub, l.productForm, l.fscClaim, l.buyer, l.transferDocNo,
           ...(l.sources || []).map(s => `${s.fmu} ${(s.plots || []).join(" ")} ${s.nameTh}`)].join(" ").toLowerCase();
@@ -4455,7 +4465,7 @@ function renderLots() {
 
   search.addEventListener("input", refresh);
   filterMonth.addEventListener("change", refresh);
-  filterStatus.addEventListener("change", refresh);
+  filterMaterial.addEventListener("change", refresh);
   selectAllCb.addEventListener("change", () => {
     if (selectAllCb.checked) visibleLotIds.forEach(id => selectedLotIds.add(id));
     else visibleLotIds.forEach(id => selectedLotIds.delete(id));
